@@ -8,7 +8,8 @@
       "Bash(npm uninstall:*)",
       "Bash(curl:*)",
       "Bash(python3:*)",
-      "Bash(pip3 install:*)"
+      "Bash(pip3 install:*)",
+      "Bash(find:*)"
     ],
     "deny": [],
     "ask": []
