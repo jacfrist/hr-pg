@@ -64,7 +64,7 @@ def make_llm_request(messages):
             "dataSources": [],
             "messages": messages,
             "options": {
-                "model": {"id": "gpt-4o-mini"},
+                "model": {"id": "gpt-4.1-mini"},
                 "prompt": messages[0]["content"] if messages else "",
             },
         }
@@ -153,7 +153,7 @@ Candidate's Answer: {answer}
 Role: {role_info['name']}
 Difficulty Level: {difficulty}
 
-Please evaluate this answer and provide a score from 0 to 100 based on:
+Please evaluate this answer and provide a score from 0 to 10 based on:
 - Relevance to the question (25 points)
 - Depth and specificity of the response (25 points)
 - Use of concrete examples (25 points)
@@ -169,7 +169,7 @@ SCORE: [number]
 FEEDBACK: [your feedback in 1-2 sentences]
 
 Example response:
-SCORE: 75
+SCORE: 7
 FEEDBACK: Good use of the STAR method with a relevant example, but could have elaborated more on the specific impact of your actions."""
 
     messages = [{"role": "user", "content": prompt}]
