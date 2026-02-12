@@ -74,12 +74,10 @@ hr-pg/
    pip install -r requirements.txt
    ```
 
-4. Run the database migrations (first time only):
-   ```bash
-   flask db init
-   flask db migrate -m "Initial migration"
-   flask db upgrade
-   ```
+4. Update database:
+    ```bash
+    flask db upgrade
+    ```
 
 5. Run the Flask server:
    ```bash
