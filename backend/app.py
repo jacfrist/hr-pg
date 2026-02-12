@@ -5,12 +5,27 @@ import requests
 import json
 import os
 import re
+from datetime import datetime
+from extensions import db, jwt, migrate
+from models import User, InterviewSession, Question, Answer, Evaluation
+from flask_jwt_extended import create_access_token, get_jwt_identity, jwt_required, get_jwt, jwt_manager
+from werkzeug.security import generate_password_hash, check_password_hash
 
 # Load environment variables from .env file
 load_dotenv()
 
 app = Flask(__name__)
 CORS(app)
+
+# Database Configuration
+app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///hr_pg.db'
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+app.config['JWT_SECRET_KEY'] = os.getenv("JWT_SECRET_KEY", "super-secret-dev-key")
+
+# Initialize Extensions
+db.init_app(app)
+jwt.init_app(app)
+migrate.init_app(app, db)
 
 # Amplify API Configuration
 AMPLIFY_API_KEY = os.getenv("AMPLIFY_API_KEY")
@@ -202,6 +217,51 @@ def health_check():
     return jsonify({"status": "ok"})
 
 
+@app.route('/api/auth/register', methods=['POST'])
+def register():
+    data = request.json
+    email = data.get('email')
+    password = data.get('password')
+    
+    if not email or not password:
+        return jsonify({"message": "Email and password are required"}), 400
+        
+    if User.query.filter_by(email=email).first():
+        return jsonify({"message": "Email already registered"}), 400
+        
+    new_user = User(email=email)
+    new_user.set_password(password)
+    
+    db.session.add(new_user)
+    db.session.commit()
+    
+    return jsonify({"message": "User registered successfully"}), 201
+
+@app.route('/api/auth/login', methods=['POST'])
+def login():
+    data = request.json
+    email = data.get('email')
+    password = data.get('password')
+    
+    user = User.query.filter_by(email=email).first()
+    
+    if user and user.check_password(password):
+        access_token = create_access_token(identity=str(user.id))
+        return jsonify({"token": access_token, "user": {"id": user.id, "email": user.email}}), 200
+        
+    return jsonify({"message": "Invalid credentials"}), 401
+
+@app.route('/api/auth/me', methods=['GET'])
+@jwt_required(optional=True)
+def get_current_user():
+    current_user_id = get_jwt_identity()
+    if current_user_id:
+        user = User.query.get(current_user_id)
+        if user:
+            return jsonify({"user": {"id": user.id, "email": user.email}}), 200
+    return jsonify({"user": None}), 200
+
+
 @app.route('/api/roles', methods=['GET'])
 def get_roles():
     roles = [
@@ -213,14 +273,30 @@ def get_roles():
 
 
 @app.route('/api/game/start', methods=['POST'])
+@jwt_required(optional=True)
 def start_game():
     data = request.json
     role = data.get('role', 'software_engineer')
+    
+    user_id = get_jwt_identity()
+    
+    # Create new session
+    role_info = ROLE_INFO.get(role, ROLE_INFO["software_engineer"])
+    new_session = InterviewSession(
+        user_id=int(user_id) if user_id else None,
+        role=role,
+        difficulty=role_info['difficulty'],
+        status='in_progress'
+    )
+    
+    db.session.add(new_session)
+    db.session.commit()
 
     # Default to 5 questions per game
     total_questions = 5
 
     return jsonify({
+        "sessionId": new_session.id,
         "gameId": "game_" + role,
         "role": role,
         "totalQuestions": total_questions,
@@ -234,6 +310,7 @@ def get_question():
     data = request.json
     role = data.get('role', 'software_engineer')
     question_number = data.get('questionNumber', 0)
+    session_id = data.get('sessionId')
 
     role_info = ROLE_INFO.get(role, ROLE_INFO["software_engineer"])
     difficulty = role_info["difficulty"]
@@ -246,6 +323,25 @@ def get_question():
             "error": True,
             "message": "Unable to generate question. Please check your API configuration and try again."
         }), 503
+        
+    # Save question to DB if session exists
+    if session_id:
+        question = Question(
+            session_id=session_id,
+            turn_index=question_number + 1,
+            question_type="behavioral", # Default for now
+            prompt_text=ai_question
+        )
+        db.session.add(question)
+        db.session.commit()
+        
+        # Return question ID so answer can be linked
+        return jsonify({
+            "questionId": question.id,
+            "questionNumber": question_number + 1,
+            "question": ai_question,
+            "totalQuestions": 5
+        })
 
     return jsonify({
         "questionNumber": question_number + 1,
@@ -255,19 +351,24 @@ def get_question():
 
 
 @app.route('/api/game/answer', methods=['POST'])
+@jwt_required(optional=True)
 def submit_answer():
     data = request.json
-    answer = data.get('answer', '')
-    question = data.get('question', '')
+    answer_text = data.get('answer', '')
+    question_text = data.get('question', '')
     boss_health = data.get('bossHealth', 100)
     player_health = data.get('playerHealth', 100)
     role = data.get('role', 'software_engineer')
+    session_id = data.get('sessionId')
+    question_id = data.get('questionId')
+    
+    user_id = get_jwt_identity()
 
     role_info = ROLE_INFO.get(role, ROLE_INFO["software_engineer"])
     difficulty = role_info["difficulty"]
 
     # Try to grade with AI
-    score, ai_feedback = grade_answer_with_ai(question, answer, role, difficulty)
+    score, ai_feedback = grade_answer_with_ai(question_text, answer_text, role, difficulty)
 
     if score is None:
         # AI grading failed - return error
@@ -286,12 +387,45 @@ def submit_answer():
         player_health -= player_damage
         feedback = f"{feedback} The boss counters for {player_damage} damage!"
 
-    boss_health -= damage
+    boss_health = max(0, boss_health - damage)
+    player_health = max(0, player_health)
+    
+    # Save answer and evaluation to DB
+    if question_id:
+        answer_entry = Answer(
+            question_id=question_id,
+            user_id=int(user_id) if user_id else None,
+            answer_text=answer_text
+        )
+        db.session.add(answer_entry)
+        db.session.commit()
+        
+        evaluation = Evaluation(
+            answer_id=answer_entry.id,
+            impact_score=score,
+            feedback_text=feedback
+        )
+        db.session.add(evaluation)
+        
+        # Update session status if game over
+        if session_id:
+            session = InterviewSession.query.get(session_id)
+            if session:
+                if boss_health <= 0:
+                    session.status = 'completed_won'
+                    session.ended_at = datetime.utcnow()
+                elif player_health <= 0:
+                    session.status = 'completed_lost'
+                    session.ended_at = datetime.utcnow()
+                # If just last question but game not technically "won/lost" by health (though UI might handle this)
+                # For now just update on health terminals
+        
+        db.session.commit()
 
     return jsonify({
         "damage": damage,
-        "bossHealth": max(0, boss_health),
-        "playerHealth": max(0, player_health),
+        "bossHealth": boss_health,
+        "playerHealth": player_health,
         "feedback": feedback
     })
 

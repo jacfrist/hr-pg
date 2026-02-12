@@ -14,8 +14,9 @@ HR-PG helps job seekers prepare for interviews through an engaging, gamified exp
 ## Tech Stack
 
 - **Frontend**: React, TypeScript, Tailwind CSS, Vite
-- **Backend**: Python, Flask
-- **LLM Integration**: Vanderbilt Amplify API (to be implemented)
+- **Backend**: Python, Flask, SQLAlchemy, SQLite
+- **LLM Integration**: Vanderbilt Amplify API
+- **Authentication**: JWT (JSON Web Tokens)
 
 ## Project Structure
 
@@ -40,11 +41,12 @@ hr-pg/
 
 ## Current Features
 
-- **Home Page**: Welcome screen with game introduction
+- **Home Page**: Welcome screen with game introduction and login/register
+- **User Accounts**: Sign up and log in to save your game history
 - **Level Select**: Choose from different job roles (Software Engineer, Product Manager, Data Scientist)
-- **Game Page**: Answer interview questions with health bar system
+- **Game Page**: Answer interview questions with health bar system. Progress is saved to the database.
 - **Results Page**: Victory or defeat screen based on performance
-- **Basic Scoring**: Placeholder scoring system based on answer length (LLM integration coming soon)
+- **AI Scoring**: Real-time feedback and scoring using Vanderbilt Amplify API
 
 ## Setup Instructions
 
@@ -72,7 +74,14 @@ hr-pg/
    pip install -r requirements.txt
    ```
 
-4. Run the Flask server:
+4. Run the database migrations (first time only):
+   ```bash
+   flask db init
+   flask db migrate -m "Initial migration"
+   flask db upgrade
+   ```
+
+5. Run the Flask server:
    ```bash
    python app.py
    ```
@@ -128,13 +137,13 @@ hr-pg/
 
 ## Future Development
 
-- [ ] Integrate Vanderbilt Amplify API for LLM-powered question generation
-- [ ] Implement NLP-based answer evaluation
+- [x] Integrate Vanderbilt Amplify API for LLM-powered question generation
+- [x] Implement NLP-based answer evaluation
 - [ ] Add 16-bit retro graphics and animations
 - [ ] Include sound effects and background music
 - [ ] Expand role catalog with more positions
 - [ ] Add difficulty settings
-- [ ] Implement user accounts and progress tracking
+- [x] Implement user accounts and progress tracking
 - [ ] Create practice mode with feedback
 
 ## Contributing
