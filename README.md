@@ -143,7 +143,10 @@ hr-pg/
 - [ ] Include sound effects and background music
 - [ ] Expand role catalog with more positions
 - [ ] Add difficulty settings
-- [x] Implement user accounts and progress tracking
+- [x] Implement database with accounts and progress tracking
+- [ ] Create user dashboard
+- [ ] Add resume-based questions and feedback
+- [ ] Add audio input and output for verbal interview practice
 - [ ] Create practice mode with feedback
 
 ## Contributing
