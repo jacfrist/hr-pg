@@ -74,7 +74,24 @@ hr-pg/
    pip install -r requirements.txt
    ```
 
-4. Update database:
+4. Configure Environment Variables:
+   Create a `.env` file in the `backend` directory (copy from `.env.example`).
+   ```bash
+   cp .env.example .env
+   ```
+   
+   Generate a secure JWT secret key:
+   ```bash
+   python -c "import secrets; print(secrets.token_hex(32))"
+   ```
+   
+   Update your `.env` file with the generated key and your Amplify API key:
+   ```ini
+   AMPLIFY_API_KEY=your_api_key
+   JWT_SECRET_KEY=paste_generated_key_here
+   ```
+
+5. Update database:
     ```bash
     flask db upgrade
     ```
