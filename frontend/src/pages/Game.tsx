@@ -29,6 +29,7 @@ function Game() {
   const [answer, setAnswer] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [gameStarted, setGameStarted] = useState(false);
+  const [error, setError] = useState('');
 
   useEffect(() => {
     startGame();
@@ -51,6 +52,7 @@ function Game() {
   };
 
   const loadNextQuestion = async () => {
+    setError('');
     try {
       const response = await axios.post(`${API_BASE_URL}/api/game/question`, {
         role,
@@ -63,8 +65,13 @@ function Game() {
         currentQuestion: response.data.questionNumber,
         feedback: ''
       }));
-    } catch (error) {
-      console.error('Error loading question:', error);
+    } catch (err: unknown) {
+      console.error('Error loading question:', err);
+      if (axios.isAxiosError(err) && err.response?.data?.message) {
+        setError(err.response.data.message);
+      } else {
+        setError('Unable to load question. Please check your API configuration and try again.');
+      }
     }
   };
 
@@ -72,10 +79,12 @@ function Game() {
     if (!answer.trim()) return;
 
     setIsLoading(true);
+    setError('');
 
     try {
       const response = await axios.post(`${API_BASE_URL}/api/game/answer`, {
         answer,
+        question: gameState.question,
         bossHealth: gameState.bossHealth,
         playerHealth: gameState.playerHealth,
         role
@@ -109,8 +118,13 @@ function Game() {
         }
       }, 2000);
 
-    } catch (error) {
-      console.error('Error submitting answer:', error);
+    } catch (err: unknown) {
+      console.error('Error submitting answer:', err);
+      if (axios.isAxiosError(err) && err.response?.data?.message) {
+        setError(err.response.data.message);
+      } else {
+        setError('Unable to grade your answer. Please check your API configuration and try again.');
+      }
     } finally {
       setIsLoading(false);
     }
@@ -166,6 +180,12 @@ function Game() {
           {gameState.feedback && (
             <div className="mb-4 p-4 bg-purple-900 bg-opacity-50 rounded-lg border border-purple-500">
               <p className="text-purple-200">{gameState.feedback}</p>
+            </div>
+          )}
+
+          {error && (
+            <div className="mb-4 p-4 bg-red-900 bg-opacity-50 rounded-lg border border-red-500">
+              <p className="text-red-200">{error}</p>
             </div>
           )}
 
