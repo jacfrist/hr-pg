@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
+import axios from 'axios';
 
 interface User {
     id: number;
@@ -43,6 +44,23 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setToken(null);
         setUser(null);
     };
+
+    // Setup Axios interceptor to handle token expiry or invalidation
+    useEffect(() => {
+        const interceptor = axios.interceptors.response.use(
+            (response) => response,
+            (error) => {
+                if (error.response && (error.response.status === 401 || error.response.status === 422)) {
+                    logout();
+                }
+                return Promise.reject(error);
+            }
+        );
+
+        return () => {
+            axios.interceptors.response.eject(interceptor);
+        };
+    }, []);
 
     return (
         <AuthContext.Provider value={{ user, token, login, logout, isAuthenticated: !!token }}>
