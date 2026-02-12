@@ -30,17 +30,14 @@ const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose }) => {
                 password
             });
 
-            if (isLogin) {
+            if (response.data.token) {
                 login(response.data.token, response.data.user);
                 onClose();
             } else {
-                // After register, auto login or ask to login
-                // For simplicity, let's just log them in if the API returned a token (it doesn't currently)
-                // Or switch to login mode
+                // Fallback if no token returned (shouldn't happen with new backend)
                 setIsLogin(true);
                 setError('Registration successful! Please log in.');
                 setLoading(false);
-                return; // Don't close modal
             }
         } catch (err: any) {
             setError(err.response?.data?.message || 'An error occurred');

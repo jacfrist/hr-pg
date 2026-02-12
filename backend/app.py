@@ -235,7 +235,13 @@ def register():
     db.session.add(new_user)
     db.session.commit()
     
-    return jsonify({"message": "User registered successfully"}), 201
+    # Auto-login after registration
+    access_token = create_access_token(identity=str(new_user.id))
+    return jsonify({
+        "message": "User registered successfully",
+        "token": access_token, 
+        "user": {"id": new_user.id, "email": new_user.email}
+    }), 201
 
 @app.route('/api/auth/login', methods=['POST'])
 def login():
