@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import axios from 'axios';
 import { API_BASE_URL } from '../config';
+import { useAuth } from '../context/AuthContext';
 
 interface GameState {
   bossHealth: number;
@@ -16,6 +17,9 @@ function Game() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const role = searchParams.get('role') || 'software_engineer';
+  const { token } = useAuth();
+  const [sessionId, setSessionId] = useState<number | null>(null);
+  const [currentQuestionId, setCurrentQuestionId] = useState<number | null>(null);
 
   const [gameState, setGameState] = useState<GameState>({
     bossHealth: 100,
@@ -28,7 +32,6 @@ function Game() {
 
   const [answer, setAnswer] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [gameStarted, setGameStarted] = useState(false);
   const [error, setError] = useState('');
 
   useEffect(() => {
@@ -37,14 +40,17 @@ function Game() {
 
   const startGame = async () => {
     try {
-      const response = await axios.post(`${API_BASE_URL}/api/game/start`, { role });
+      const headers = token ? { Authorization: `Bearer ${token}` } : {};
+      const response = await axios.post(`${API_BASE_URL}/api/game/start`, { role }, { headers });
+
+      setSessionId(response.data.sessionId);
+
       setGameState(prev => ({
         ...prev,
         bossHealth: response.data.bossHealth,
         playerHealth: response.data.playerHealth,
         totalQuestions: response.data.totalQuestions
       }));
-      setGameStarted(true);
       loadNextQuestion();
     } catch (error) {
       console.error('Error starting game:', error);
@@ -54,10 +60,14 @@ function Game() {
   const loadNextQuestion = async () => {
     setError('');
     try {
+      const headers = token ? { Authorization: `Bearer ${token}` } : {};
       const response = await axios.post(`${API_BASE_URL}/api/game/question`, {
         role,
-        questionNumber: gameState.currentQuestion
-      });
+        questionNumber: gameState.currentQuestion,
+        sessionId
+      }, { headers });
+
+      setCurrentQuestionId(response.data.questionId);
 
       setGameState(prev => ({
         ...prev,
@@ -82,13 +92,16 @@ function Game() {
     setError('');
 
     try {
+      const headers = token ? { Authorization: `Bearer ${token}` } : {};
       const response = await axios.post(`${API_BASE_URL}/api/game/answer`, {
         answer,
         question: gameState.question,
         bossHealth: gameState.bossHealth,
         playerHealth: gameState.playerHealth,
-        role
-      });
+        role,
+        sessionId,
+        questionId: currentQuestionId
+      }, { headers });
 
       const newBossHealth = response.data.bossHealth;
       const newPlayerHealth = response.data.playerHealth;
