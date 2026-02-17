@@ -367,6 +367,8 @@ def submit_answer():
     role = data.get('role', 'software_engineer')
     session_id = data.get('sessionId')
     question_id = data.get('questionId')
+    question_number = data.get('questionNumber', 0)
+    total_questions = data.get('totalQuestions', 5)
     
     user_id = get_jwt_identity()
 
@@ -417,14 +419,22 @@ def submit_answer():
         if session_id:
             session = InterviewSession.query.get(session_id)
             if session:
+                # Check if this was the last question
+                is_last_question = question_number >= total_questions
+                
                 if boss_health <= 0:
                     session.status = 'completed_won'
                     session.ended_at = datetime.utcnow()
                 elif player_health <= 0:
                     session.status = 'completed_lost'
                     session.ended_at = datetime.utcnow()
-                # If just last question but game not technically "won/lost" by health (though UI might handle this)
-                # For now just update on health terminals
+                elif is_last_question:
+                    # Game finished all questions, determine winner by health
+                    if boss_health < player_health:
+                        session.status = 'completed_won'
+                    else:
+                        session.status = 'completed_lost'
+                    session.ended_at = datetime.utcnow()
         
         db.session.commit()
 
@@ -445,7 +455,10 @@ def get_history():
 
     sessions = (
         InterviewSession.query
-        .filter_by(user_id=int(user_id))
+        .filter(
+            InterviewSession.user_id == int(user_id),
+            InterviewSession.status != 'in_progress'
+        )
         .order_by(InterviewSession.started_at.desc())
         .all()
     )

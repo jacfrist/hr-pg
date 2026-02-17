@@ -58,13 +58,14 @@ function Game() {
     }
   };
 
-  const loadNextQuestion = async (sessionIdOverride?: number) => {
+  const loadNextQuestion = async (sessionIdOverride?: number, questionNumberOverride?: number) => {
     setError('');
     try {
       const headers = token ? { Authorization: `Bearer ${token}` } : {};
+      const questionNumber = questionNumberOverride ?? gameState.currentQuestion;
       const response = await axios.post(`${API_BASE_URL}/api/game/question`, {
         role,
-        questionNumber: gameState.currentQuestion,
+        questionNumber: questionNumber,
         sessionId: sessionIdOverride ?? sessionId
       }, { headers });
 
@@ -101,7 +102,9 @@ function Game() {
         playerHealth: gameState.playerHealth,
         role,
         sessionId,
-        questionId: currentQuestionId
+        questionId: currentQuestionId,
+        questionNumber: gameState.currentQuestion,
+        totalQuestions: gameState.totalQuestions
       }, { headers });
 
       const newBossHealth = response.data.bossHealth;
@@ -117,12 +120,13 @@ function Game() {
       setAnswer('');
 
       setTimeout(() => {
+        const nextQuestionNumber = gameState.currentQuestion + 1;
         if (newBossHealth <= 0) {
           navigate(`/results?won=true&role=${role}`);
         } else if (newPlayerHealth <= 0) {
           navigate(`/results?won=false&role=${role}`);
-        } else if (gameState.currentQuestion < gameState.totalQuestions) {
-          loadNextQuestion();
+        } else if (nextQuestionNumber <= gameState.totalQuestions) {
+          loadNextQuestion(undefined, nextQuestionNumber);
         } else {
           if (newBossHealth < newPlayerHealth) {
             navigate(`/results?won=true&role=${role}`);
@@ -151,7 +155,7 @@ function Game() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-purple-900 via-purple-800 to-indigo-900 p-4">
+    <div className="min-h-screen bg-gradient-to-b from-purple-900 via-purple-800 to-indigo-900 p-4 pt-20">
       <div className="max-w-4xl mx-auto">
         {/* Health Bars */}
         <div className="mb-8 space-y-4">

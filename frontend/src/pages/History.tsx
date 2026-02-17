@@ -87,7 +87,7 @@ function History() {
   }
 
   return (
-    <div className="min-h-screen p-4">
+    <div className="min-h-screen p-4 pt-20">
       <div className="max-w-4xl mx-auto space-y-6">
         <div className="retro-panel flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>

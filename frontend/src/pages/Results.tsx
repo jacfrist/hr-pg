@@ -14,7 +14,7 @@ function Results() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-purple-900 via-purple-800 to-indigo-900 flex items-center justify-center p-4">
+    <div className="min-h-screen bg-gradient-to-b from-purple-900 via-purple-800 to-indigo-900 flex items-center justify-center p-4 pt-20">
       <div className="max-w-2xl w-full text-center">
         {won ? (
           <div className="space-y-6">
