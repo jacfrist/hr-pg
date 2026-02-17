@@ -436,5 +436,51 @@ def submit_answer():
     })
 
 
+@app.route('/api/history', methods=['GET'])
+@jwt_required()
+def get_history():
+    user_id = get_jwt_identity()
+    if not user_id:
+        return jsonify({"message": "Unauthorized"}), 401
+
+    sessions = (
+        InterviewSession.query
+        .filter_by(user_id=int(user_id))
+        .order_by(InterviewSession.started_at.desc())
+        .all()
+    )
+
+    history = []
+    for session in sessions:
+        questions = []
+        ordered_questions = sorted(session.questions, key=lambda q: q.turn_index)
+        for question in ordered_questions:
+            answer = question.answers[0] if question.answers else None
+            evaluation = answer.evaluation if answer else None
+
+            questions.append({
+                "questionId": question.id,
+                "turnIndex": question.turn_index,
+                "questionType": question.question_type,
+                "prompt": question.prompt_text,
+                "answer": answer.answer_text if answer else None,
+                "answeredAt": answer.timestamp.isoformat() if answer and answer.timestamp else None,
+                "score": evaluation.impact_score if evaluation else None,
+                "feedback": evaluation.feedback_text if evaluation else None
+            })
+
+        history.append({
+            "sessionId": session.id,
+            "role": session.role,
+            "difficulty": session.difficulty,
+            "status": session.status,
+            "startedAt": session.started_at.isoformat() if session.started_at else None,
+            "endedAt": session.ended_at.isoformat() if session.ended_at else None,
+            "questions": questions
+        })
+
+    return jsonify({"history": history})
+
+
 if __name__ == '__main__':
     app.run(debug=True, port=5001)
