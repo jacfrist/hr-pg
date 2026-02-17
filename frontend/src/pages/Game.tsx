@@ -43,7 +43,8 @@ function Game() {
       const headers = token ? { Authorization: `Bearer ${token}` } : {};
       const response = await axios.post(`${API_BASE_URL}/api/game/start`, { role }, { headers });
 
-      setSessionId(response.data.sessionId);
+      const newSessionId = response.data.sessionId as number | null;
+      setSessionId(newSessionId);
 
       setGameState(prev => ({
         ...prev,
@@ -51,20 +52,20 @@ function Game() {
         playerHealth: response.data.playerHealth,
         totalQuestions: response.data.totalQuestions
       }));
-      loadNextQuestion();
+      loadNextQuestion(newSessionId ?? undefined);
     } catch (error) {
       console.error('Error starting game:', error);
     }
   };
 
-  const loadNextQuestion = async () => {
+  const loadNextQuestion = async (sessionIdOverride?: number) => {
     setError('');
     try {
       const headers = token ? { Authorization: `Bearer ${token}` } : {};
       const response = await axios.post(`${API_BASE_URL}/api/game/question`, {
         role,
         questionNumber: gameState.currentQuestion,
-        sessionId
+        sessionId: sessionIdOverride ?? sessionId
       }, { headers });
 
       setCurrentQuestionId(response.data.questionId);
