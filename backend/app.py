@@ -367,6 +367,8 @@ def submit_answer():
     role = data.get('role', 'software_engineer')
     session_id = data.get('sessionId')
     question_id = data.get('questionId')
+    question_number = data.get('questionNumber', 0)
+    total_questions = data.get('totalQuestions', 5)
     
     user_id = get_jwt_identity()
 
@@ -417,14 +419,22 @@ def submit_answer():
         if session_id:
             session = InterviewSession.query.get(session_id)
             if session:
+                # Check if this was the last question
+                is_last_question = question_number >= total_questions
+                
                 if boss_health <= 0:
                     session.status = 'completed_won'
                     session.ended_at = datetime.utcnow()
                 elif player_health <= 0:
                     session.status = 'completed_lost'
                     session.ended_at = datetime.utcnow()
-                # If just last question but game not technically "won/lost" by health (though UI might handle this)
-                # For now just update on health terminals
+                elif is_last_question:
+                    # Game finished all questions, determine winner by health
+                    if boss_health < player_health:
+                        session.status = 'completed_won'
+                    else:
+                        session.status = 'completed_lost'
+                    session.ended_at = datetime.utcnow()
         
         db.session.commit()
 
@@ -434,6 +444,55 @@ def submit_answer():
         "playerHealth": player_health,
         "feedback": feedback
     })
+
+
+@app.route('/api/history', methods=['GET'])
+@jwt_required()
+def get_history():
+    user_id = get_jwt_identity()
+    if not user_id:
+        return jsonify({"message": "Unauthorized"}), 401
+
+    sessions = (
+        InterviewSession.query
+        .filter(
+            InterviewSession.user_id == int(user_id),
+            InterviewSession.status != 'in_progress'
+        )
+        .order_by(InterviewSession.started_at.desc())
+        .all()
+    )
+
+    history = []
+    for session in sessions:
+        questions = []
+        ordered_questions = sorted(session.questions, key=lambda q: q.turn_index)
+        for question in ordered_questions:
+            answer = question.answers[0] if question.answers else None
+            evaluation = answer.evaluation if answer else None
+
+            questions.append({
+                "questionId": question.id,
+                "turnIndex": question.turn_index,
+                "questionType": question.question_type,
+                "prompt": question.prompt_text,
+                "answer": answer.answer_text if answer else None,
+                "answeredAt": answer.timestamp.isoformat() if answer and answer.timestamp else None,
+                "score": evaluation.impact_score if evaluation else None,
+                "feedback": evaluation.feedback_text if evaluation else None
+            })
+
+        history.append({
+            "sessionId": session.id,
+            "role": session.role,
+            "difficulty": session.difficulty,
+            "status": session.status,
+            "startedAt": session.started_at.isoformat() if session.started_at else None,
+            "endedAt": session.ended_at.isoformat() if session.ended_at else None,
+            "questions": questions
+        })
+
+    return jsonify({"history": history})
 
 
 if __name__ == '__main__':
