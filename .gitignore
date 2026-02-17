@@ -13,6 +13,14 @@ backend/.pytest_cache/
 backend/*.egg-info/
 backend/dist/
 backend/build/
+backend/instance/
+*.db
+*.sqlite3
+
+# Flask
+backend/instance/
+backend/.webassets-cache
+backend/.env
 
 # Node
 frontend/node_modules/
