@@ -14,10 +14,6 @@ function LevelSelect() {
   const [roles, setRoles] = useState<Role[]>([]);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    fetchRoles();
-  }, []);
-
   const fetchRoles = async () => {
     try {
       const response = await axios.get(`${API_BASE_URL}/api/roles`);
@@ -28,6 +24,11 @@ function LevelSelect() {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    fetchRoles();
+  }, []);
 
   const selectRole = (roleId: string) => {
     navigate(`/game?role=${roleId}`);

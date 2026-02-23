@@ -39,8 +39,15 @@ const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose }) => {
                 setError('Registration successful! Please log in.');
                 setLoading(false);
             }
-        } catch (err: any) {
-            setError(err.response?.data?.message || 'An error occurred');
+        } catch (err: unknown) {
+            if (axios.isAxiosError(err)) {
+                setError(
+                (err.response?.data as { message?: string } | undefined)?.message ||
+                'Login failed. Please try again.'
+                );
+            } else {
+                setError('Login failed. Please try again.');
+            }
         } finally {
             if (isLogin) {
                 setLoading(false);

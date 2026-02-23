@@ -1,3 +1,4 @@
+/* eslint-disable react-refresh/only-export-components */
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import axios from 'axios';
 
@@ -17,19 +18,17 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-    const [user, setUser] = useState<User | null>(null);
-    const [token, setToken] = useState<string | null>(localStorage.getItem('token'));
-
-    useEffect(() => {
-        const storedToken = localStorage.getItem('token');
+    const [user, setUser] = useState<User | null>(() => {
         const storedUser = localStorage.getItem('user');
-
-        if (storedToken && storedUser) {
-            setToken(storedToken);
-            setUser(JSON.parse(storedUser));
-            // Optionally verify token validity with backend here
+        if (!storedUser) return null;
+        try {
+            return JSON.parse(storedUser) as User;
+        } catch {
+            return null;
         }
-    }, []);
+    });
+
+    const [token, setToken] = useState<string | null>(() => localStorage.getItem('token'));
 
     const login = (newToken: string, newUser: User) => {
         localStorage.setItem('token', newToken);

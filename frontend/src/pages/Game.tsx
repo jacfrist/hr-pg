@@ -36,6 +36,7 @@ function Game() {
 
   useEffect(() => {
     startGame();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const startGame = async () => {
