@@ -3,6 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import axios from 'axios';
 import { API_BASE_URL } from '../config';
 import { useAuth } from '../context/AuthContext';
+import MicDictation from '../components/asr/MicDictation';
 
 interface GameState {
   bossHealth: number;
@@ -206,6 +207,8 @@ function Game() {
               <p className="text-red-200">{error}</p>
             </div>
           )}
+
+          <MicDictation value={answer} onChange={setAnswer} disabled={isLoading} />
 
           <textarea
             value={answer}
