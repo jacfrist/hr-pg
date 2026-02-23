@@ -96,6 +96,17 @@ export default function MicDictation({ value, onChange, disabled }: Props) {
         </span>
       </button>
 
+      {/* Clear button */}
+      <button
+        type="button"
+        onClick={clear}
+        disabled={disabled || (!value.trim() && !interim)}
+        className="px-3 py-2 rounded-lg bg-purple-900 bg-opacity-50 border border-purple-600 text-white
+                   disabled:opacity-50 disabled:cursor-not-allowed hover:bg-purple-800 transition"
+      >
+        Clear response
+      </button>
+
       {/* Optional live interim preview */}
       {isListening && interim ? (
         <span className="text-purple-200 opacity-80 truncate">
