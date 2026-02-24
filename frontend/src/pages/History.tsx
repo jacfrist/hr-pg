@@ -78,8 +78,11 @@ function History() {
           <p className="text-sm text-purple-200">
             Log in to view your previous interview sessions, answers, and feedback.
           </p>
-          <button onClick={() => navigate('/')} className="text-xs">
-            Back Home
+          <button
+            onClick={() => (window.history.length > 1 ? navigate(-1) : navigate('/'))}
+            className="text-xs"
+          >
+            Back
           </button>
         </div>
       </div>
@@ -94,8 +97,11 @@ function History() {
             <h1 className="text-3xl retro-title">Session History</h1>
             <p className="text-sm text-purple-200">Review your past interview battles.</p>
           </div>
-          <button onClick={() => navigate('/')} className="text-xs">
-            Back Home
+          <button
+            onClick={() => (window.history.length > 1 ? navigate(-1) : navigate('/'))}
+            className="text-xs"
+          >
+            Back
           </button>
         </div>
 
