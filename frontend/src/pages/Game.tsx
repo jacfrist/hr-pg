@@ -20,6 +20,7 @@ function Game() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const role = searchParams.get('role') || 'software_engineer';
+  const difficulty = (searchParams.get('difficulty') || 'Medium');
   const { token } = useAuth();
   const [sessionId, setSessionId] = useState<number | null>(null);
   const [currentQuestionId, setCurrentQuestionId] = useState<number | null>(null);
@@ -47,6 +48,7 @@ function Game() {
 
         const canRestore =
           saved?.role === role &&
+          saved?.difficulty === difficulty &&
           saved?.gameState &&
           typeof saved.gameState.question === 'string' &&
           saved.gameState.question.trim().length > 0;
@@ -78,6 +80,7 @@ function Game() {
 
     const payload = {
       role,
+      difficulty,
       sessionId,
       currentQuestionId,
       gameState,
@@ -85,12 +88,16 @@ function Game() {
     };
 
     localStorage.setItem(GAME_STATE_KEY, JSON.stringify(payload));
-  }, [hydrated, role, sessionId, currentQuestionId, gameState, answer]);
+  }, [hydrated, role, difficulty, sessionId, currentQuestionId, gameState, answer]);
 
   const startGame = async () => {
     try {
       const headers = token ? { Authorization: `Bearer ${token}` } : {};
-      const response = await axios.post(`${API_BASE_URL}/api/game/start`, { role }, { headers });
+      const response = await axios.post(
+        `${API_BASE_URL}/api/game/start`,
+        { role, difficulty },
+        { headers }
+      );
 
       const newSessionId = response.data.sessionId as number | null;
       setSessionId(newSessionId);
@@ -112,10 +119,11 @@ function Game() {
     try {
       const headers = token ? { Authorization: `Bearer ${token}` } : {};
       const questionNumber1 = questionNumberOverride ?? gameState.currentQuestion;
-      const questionNumber0 = Math.max(0, questionNumber1 - 1);                   
+      const questionNumber0 = Math.max(0, questionNumber1 - 1);
 
       const response = await axios.post(`${API_BASE_URL}/api/game/question`, {
         role,
+        difficulty,
         questionNumber: questionNumber0,
         sessionId: sessionIdOverride ?? sessionId
       }, { headers });
@@ -152,6 +160,7 @@ function Game() {
         bossHealth: gameState.bossHealth,
         playerHealth: gameState.playerHealth,
         role,
+        difficulty,
         sessionId,
         questionId: currentQuestionId,
         questionNumber: gameState.currentQuestion,
@@ -245,6 +254,9 @@ function Game() {
         <div className="bg-purple-800 bg-opacity-50 rounded-lg p-8 backdrop-blur-sm border border-purple-600 mb-6">
           <div className="text-purple-300 text-sm mb-2">
             Question {gameState.currentQuestion} of {gameState.totalQuestions}
+          </div>
+          <div className="text-purple-300 text-sm mb-4">
+            Difficulty: <span className="text-white font-semibold">{difficulty}</span>
           </div>
           <h2 className="text-2xl text-white font-bold mb-4">
             {gameState.question || 'Loading question...'}
