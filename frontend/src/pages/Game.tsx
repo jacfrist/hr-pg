@@ -3,6 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import axios from 'axios';
 import { API_BASE_URL } from '../config';
 import { useAuth } from '../context/AuthContext';
+import MicDictation from '../components/asr/MicDictation';
 
 interface GameState {
   bossHealth: number;
@@ -13,6 +14,8 @@ interface GameState {
   feedback: string;
 }
 
+const GAME_STATE_KEY = 'hrpg_game_state_v1';
+
 function Game() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -20,12 +23,13 @@ function Game() {
   const { token } = useAuth();
   const [sessionId, setSessionId] = useState<number | null>(null);
   const [currentQuestionId, setCurrentQuestionId] = useState<number | null>(null);
+  const [hydrated, setHydrated] = useState(false);
 
   const [gameState, setGameState] = useState<GameState>({
     bossHealth: 100,
     playerHealth: 100,
-    currentQuestion: 0,
-    totalQuestions: 3,
+    currentQuestion: 1,
+    totalQuestions: 5,
     question: '',
     feedback: ''
   });
@@ -35,9 +39,53 @@ function Game() {
   const [error, setError] = useState('');
 
   useEffect(() => {
+    const raw = localStorage.getItem(GAME_STATE_KEY);
+
+    if (raw) {
+      try {
+        const saved = JSON.parse(raw);
+
+        const canRestore =
+          saved?.role === role &&
+          saved?.gameState &&
+          typeof saved.gameState.question === 'string' &&
+          saved.gameState.question.trim().length > 0;
+
+        if (canRestore) {
+          setSessionId(saved.sessionId ?? null);
+          setCurrentQuestionId(saved.currentQuestionId ?? null);
+          setGameState(saved.gameState);
+          setAnswer(saved.answer ?? '');
+          setHydrated(true);
+          return;
+        }
+
+        localStorage.removeItem(GAME_STATE_KEY);
+      } catch {
+        localStorage.removeItem(GAME_STATE_KEY);
+      }
+    }
+
+    setHydrated(true);
     startGame();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    if (!hydrated) return;
+
+    if (!sessionId && gameState.currentQuestion === 0 && !gameState.question) return;
+
+    const payload = {
+      role,
+      sessionId,
+      currentQuestionId,
+      gameState,
+      answer,
+    };
+
+    localStorage.setItem(GAME_STATE_KEY, JSON.stringify(payload));
+  }, [hydrated, role, sessionId, currentQuestionId, gameState, answer]);
 
   const startGame = async () => {
     try {
@@ -53,7 +101,7 @@ function Game() {
         playerHealth: response.data.playerHealth,
         totalQuestions: response.data.totalQuestions
       }));
-      loadNextQuestion(newSessionId ?? undefined);
+      loadNextQuestion(newSessionId ?? undefined, 1);
     } catch (error) {
       console.error('Error starting game:', error);
     }
@@ -63,10 +111,12 @@ function Game() {
     setError('');
     try {
       const headers = token ? { Authorization: `Bearer ${token}` } : {};
-      const questionNumber = questionNumberOverride ?? gameState.currentQuestion;
+      const questionNumber1 = questionNumberOverride ?? gameState.currentQuestion;
+      const questionNumber0 = Math.max(0, questionNumber1 - 1);                   
+
       const response = await axios.post(`${API_BASE_URL}/api/game/question`, {
         role,
-        questionNumber: questionNumber,
+        questionNumber: questionNumber0,
         sessionId: sessionIdOverride ?? sessionId
       }, { headers });
 
@@ -124,15 +174,19 @@ function Game() {
         const nextQuestionNumber = gameState.currentQuestion + 1;
         if (newBossHealth <= 0) {
           navigate(`/results?won=true&role=${role}`);
+          localStorage.removeItem(GAME_STATE_KEY);
         } else if (newPlayerHealth <= 0) {
           navigate(`/results?won=false&role=${role}`);
+          localStorage.removeItem(GAME_STATE_KEY);
         } else if (nextQuestionNumber <= gameState.totalQuestions) {
           loadNextQuestion(undefined, nextQuestionNumber);
         } else {
           if (newBossHealth < newPlayerHealth) {
             navigate(`/results?won=true&role=${role}`);
+            localStorage.removeItem(GAME_STATE_KEY);
           } else {
             navigate(`/results?won=false&role=${role}`);
+            localStorage.removeItem(GAME_STATE_KEY);
           }
         }
       }, 2000);
@@ -208,6 +262,8 @@ function Game() {
             </div>
           )}
 
+          <MicDictation value={answer} onChange={setAnswer} disabled={isLoading} />
+
           <textarea
             value={answer}
             onChange={(e) => setAnswer(e.target.value)}
@@ -227,7 +283,10 @@ function Game() {
 
         <div className="text-center">
           <button
-            onClick={() => navigate('/')}
+            onClick={() => {
+              localStorage.removeItem(GAME_STATE_KEY);
+              navigate('/');
+            }}
             className="text-purple-300 hover:text-white underline"
           >
             Quit Game

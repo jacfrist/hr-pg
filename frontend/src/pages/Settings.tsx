@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { applyVolumeFromSettings } from '../audio/settingsVolume';
 
 type TextSpeed = 'slow' | 'normal' | 'fast';
 
@@ -46,6 +47,7 @@ function Settings() {
 
   useEffect(() => {
     localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+    applyVolumeFromSettings();
   }, [settings]);
 
   const updateSetting = <K extends keyof AppSettings>(key: K, value: AppSettings[K]) => {
@@ -70,8 +72,11 @@ function Settings() {
             <button onClick={resetDefaults} className="text-xs">
               Reset Defaults
             </button>
-            <button onClick={() => navigate('/')} className="text-xs">
-              Back Home
+            <button
+              onClick={() => (window.history.length > 1 ? navigate(-1) : navigate('/'))}
+              className="text-xs"
+            >
+              Back
             </button>
           </div>
         </div>
