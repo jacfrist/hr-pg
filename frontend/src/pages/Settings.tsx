@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { applyVolumeFromSettings } from '../audio/settingsVolume';
 
 type TextSpeed = 'slow' | 'normal' | 'fast';
 
@@ -46,6 +47,7 @@ function Settings() {
 
   useEffect(() => {
     localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+    applyVolumeFromSettings();
   }, [settings]);
 
   const updateSetting = <K extends keyof AppSettings>(key: K, value: AppSettings[K]) => {

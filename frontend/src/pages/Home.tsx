@@ -1,4 +1,6 @@
 import { useNavigate } from 'react-router-dom';
+import { startBgmFromUserGesture } from '../audio/bgm';
+import { applyVolumeFromSettings } from '../audio/settingsVolume';
 
 function Home() {
   const navigate = useNavigate();
@@ -14,7 +16,11 @@ function Home() {
 
         <div className="space-y-4">
           <button
-            onClick={() => navigate('/level-select')}
+            onClick={async () => {
+              await startBgmFromUserGesture();
+              applyVolumeFromSettings();
+              navigate('/level-select');
+            }}
             className="bg-purple-600 hover:bg-purple-700 text-white font-bold py-4 px-8 rounded-lg text-xl transition-all duration-200 transform hover:scale-105 shadow-lg"
           >
             Start Game
