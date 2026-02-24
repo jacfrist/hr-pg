@@ -72,8 +72,11 @@ function Settings() {
             <button onClick={resetDefaults} className="text-xs">
               Reset Defaults
             </button>
-            <button onClick={() => navigate('/')} className="text-xs">
-              Back Home
+            <button
+              onClick={() => (window.history.length > 1 ? navigate(-1) : navigate('/'))}
+              className="text-xs"
+            >
+              Back
             </button>
           </div>
         </div>
