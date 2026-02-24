@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 type SpeechState = {
   isSupported: boolean;
@@ -8,10 +8,53 @@ type SpeechState = {
   error: string | null;
 };
 
+/**
+ * Minimal types so we don't rely on lib.dom SpeechRecognition typings,
+ * which aren't always available.
+ */
+type MinimalSpeechRecognitionResult = {
+  isFinal: boolean;
+  0: { transcript: string };
+};
+
+type MinimalSpeechRecognitionEvent = {
+  resultIndex: number;
+  results: ArrayLike<MinimalSpeechRecognitionResult>;
+};
+
+type MinimalSpeechRecognition = {
+  continuous: boolean;
+  interimResults: boolean;
+  lang: string;
+  onstart: null | (() => void);
+  onend: null | (() => void);
+  onerror: null | ((e: { error?: string }) => void);
+  onresult: null | ((event: MinimalSpeechRecognitionEvent) => void);
+  start: () => void;
+  stop: () => void;
+};
+
+type SpeechRecognitionConstructor = new () => MinimalSpeechRecognition;
+
+function getSpeechRecognitionCtor(): SpeechRecognitionConstructor | null {
+  const w = window as unknown as {
+    SpeechRecognition?: SpeechRecognitionConstructor;
+    webkitSpeechRecognition?: SpeechRecognitionConstructor;
+  };
+
+  return w.SpeechRecognition ?? w.webkitSpeechRecognition ?? null;
+}
+
 export function useSpeechRecognition() {
-  const recognitionRef = useRef<any>(null);
+  const supported = useMemo(() => {
+    if (typeof window === "undefined") return false;
+    return getSpeechRecognitionCtor() !== null;
+  }, []);
+
+  const recognitionRef = useRef<MinimalSpeechRecognition | null>(null);
+
   const [state, setState] = useState<SpeechState>({
-    isSupported: true,
+    isSupported: supported,
     isListening: false,
     interim: "",
     finalText: "",
@@ -19,18 +62,15 @@ export function useSpeechRecognition() {
   });
 
   useEffect(() => {
-    const SpeechRecognition =
-      (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!supported) return;
 
-    if (!SpeechRecognition) {
-      setState((s) => ({ ...s, isSupported: false }));
-      return;
-    }
+    const Ctor = getSpeechRecognitionCtor();
+    if (!Ctor) return;
 
-    const recognition = new SpeechRecognition();
-    recognition.continuous = true;       // keep listening
-    recognition.interimResults = true;   // get live partial text
-    recognition.lang = "en-US";          // you can make this configurable
+    const recognition = new Ctor();
+    recognition.continuous = true;
+    recognition.interimResults = true;
+    recognition.lang = "en-US";
 
     recognition.onstart = () => {
       setState((s) => ({ ...s, isListening: true, error: null }));
@@ -40,11 +80,11 @@ export function useSpeechRecognition() {
       setState((s) => ({ ...s, isListening: false, interim: "" }));
     };
 
-    recognition.onerror = (e: any) => {
+    recognition.onerror = (e) => {
       setState((s) => ({ ...s, error: e?.error || "speech error" }));
     };
 
-    recognition.onresult = (event: any) => {
+    recognition.onresult = (event) => {
       let interim = "";
       let finalChunk = "";
 
@@ -66,19 +106,23 @@ export function useSpeechRecognition() {
     return () => {
       try {
         recognition.stop();
-      } catch {}
+      } catch (err) {
+        void err;
+      }
     };
-  }, []);
+  }, [supported]);
 
   const start = () => {
-    if (!recognitionRef.current) return;
+    const rec = recognitionRef.current;
+    if (!rec) return;
     setState((s) => ({ ...s, finalText: "" }));
-    recognitionRef.current.start();
+    rec.start();
   };
 
   const stop = () => {
-    if (!recognitionRef.current) return;
-    recognitionRef.current.stop();
+    const rec = recognitionRef.current;
+    if (!rec) return;
+    rec.stop();
   };
 
   const reset = () => setState((s) => ({ ...s, interim: "", finalText: "" }));
