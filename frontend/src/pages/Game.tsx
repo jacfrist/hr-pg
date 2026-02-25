@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import axios from 'axios';
 import { API_BASE_URL } from '../config';
@@ -15,11 +15,37 @@ interface GameState {
 }
 
 const GAME_STATE_KEY = 'hrpg_game_state_v1';
+const SETTINGS_KEY = 'hrpg_settings';
+
+type GameplaySettings = {
+  autoAdvance: boolean;
+  showTooltips: boolean;
+};
+
+function loadGameplaySettings(): GameplaySettings {
+  try {
+    const raw = localStorage.getItem(SETTINGS_KEY);
+    if (!raw) return { autoAdvance: true, showTooltips: true };
+
+    const parsed = JSON.parse(raw) as Partial<GameplaySettings>;
+    return {
+      autoAdvance: typeof parsed.autoAdvance === 'boolean' ? parsed.autoAdvance : true,
+      showTooltips: typeof parsed.showTooltips === 'boolean' ? parsed.showTooltips : true
+    };
+  } catch {
+    return { autoAdvance: true, showTooltips: true };
+  }
+}
+
+type NextAction =
+  | { kind: 'next'; nextQuestionNumber: number }
+  | { kind: 'results'; won: boolean };
 
 function Game() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const role = searchParams.get('role') || 'software_engineer';
+  const difficulty = (searchParams.get('difficulty') || 'Medium');
   const { token } = useAuth();
   const [sessionId, setSessionId] = useState<number | null>(null);
   const [currentQuestionId, setCurrentQuestionId] = useState<number | null>(null);
@@ -38,6 +64,19 @@ function Game() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
 
+  const isShowingFeedback = Boolean(gameState.feedback);
+
+  const [gameplaySettings, setGameplaySettings] = useState<GameplaySettings>(() => loadGameplaySettings());
+  const [nextAction, setNextAction] = useState<NextAction | null>(null);
+
+  useEffect(() => {
+    const onStorage = (e: StorageEvent) => {
+      if (e.key === SETTINGS_KEY) setGameplaySettings(loadGameplaySettings());
+    };
+    window.addEventListener('storage', onStorage);
+    return () => window.removeEventListener('storage', onStorage);
+  }, []);
+
   useEffect(() => {
     const raw = localStorage.getItem(GAME_STATE_KEY);
 
@@ -47,6 +86,7 @@ function Game() {
 
         const canRestore =
           saved?.role === role &&
+          saved?.difficulty === difficulty &&
           saved?.gameState &&
           typeof saved.gameState.question === 'string' &&
           saved.gameState.question.trim().length > 0;
@@ -68,6 +108,7 @@ function Game() {
 
     setHydrated(true);
     startGame();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -77,6 +118,7 @@ function Game() {
 
     const payload = {
       role,
+      difficulty,
       sessionId,
       currentQuestionId,
       gameState,
@@ -84,12 +126,29 @@ function Game() {
     };
 
     localStorage.setItem(GAME_STATE_KEY, JSON.stringify(payload));
-  }, [hydrated, role, sessionId, currentQuestionId, gameState, answer]);
+  }, [hydrated, role, difficulty, sessionId, currentQuestionId, gameState, answer]);
+
+  const performNextAction = (action: NextAction) => {
+    setNextAction(null);
+
+    if (action.kind === 'results') {
+      navigate(`/results?won=${action.won}&role=${role}`);
+      localStorage.removeItem(GAME_STATE_KEY);
+      return;
+    }
+
+    loadNextQuestion(undefined, action.nextQuestionNumber);
+  };
 
   const startGame = async () => {
+    setNextAction(null);
     try {
       const headers = token ? { Authorization: `Bearer ${token}` } : {};
-      const response = await axios.post(`${API_BASE_URL}/api/game/start`, { role }, { headers });
+      const response = await axios.post(
+        `${API_BASE_URL}/api/game/start`,
+        { role, difficulty },
+        { headers }
+      );
 
       const newSessionId = response.data.sessionId as number | null;
       setSessionId(newSessionId);
@@ -107,14 +166,16 @@ function Game() {
   };
 
   const loadNextQuestion = async (sessionIdOverride?: number, questionNumberOverride?: number) => {
+    setNextAction(null);
     setError('');
     try {
       const headers = token ? { Authorization: `Bearer ${token}` } : {};
       const questionNumber1 = questionNumberOverride ?? gameState.currentQuestion;
-      const questionNumber0 = Math.max(0, questionNumber1 - 1);                   
+      const questionNumber0 = Math.max(0, questionNumber1 - 1);
 
       const response = await axios.post(`${API_BASE_URL}/api/game/question`, {
         role,
+        difficulty,
         questionNumber: questionNumber0,
         sessionId: sessionIdOverride ?? sessionId
       }, { headers });
@@ -140,6 +201,7 @@ function Game() {
   const submitAnswer = async () => {
     if (!answer.trim()) return;
 
+    setNextAction(null);
     setIsLoading(true);
     setError('');
 
@@ -151,6 +213,7 @@ function Game() {
         bossHealth: gameState.bossHealth,
         playerHealth: gameState.playerHealth,
         role,
+        difficulty,
         sessionId,
         questionId: currentQuestionId,
         questionNumber: gameState.currentQuestion,
@@ -169,26 +232,24 @@ function Game() {
 
       setAnswer('');
 
-      setTimeout(() => {
+      const computed: NextAction = (() => {
         const nextQuestionNumber = gameState.currentQuestion + 1;
-        if (newBossHealth <= 0) {
-          navigate(`/results?won=true&role=${role}`);
-          localStorage.removeItem(GAME_STATE_KEY);
-        } else if (newPlayerHealth <= 0) {
-          navigate(`/results?won=false&role=${role}`);
-          localStorage.removeItem(GAME_STATE_KEY);
-        } else if (nextQuestionNumber <= gameState.totalQuestions) {
-          loadNextQuestion(undefined, nextQuestionNumber);
-        } else {
-          if (newBossHealth < newPlayerHealth) {
-            navigate(`/results?won=true&role=${role}`);
-            localStorage.removeItem(GAME_STATE_KEY);
-          } else {
-            navigate(`/results?won=false&role=${role}`);
-            localStorage.removeItem(GAME_STATE_KEY);
-          }
+
+        if (newBossHealth <= 0) return { kind: 'results', won: true };
+        if (newPlayerHealth <= 0) return { kind: 'results', won: false };
+
+        if (nextQuestionNumber <= gameState.totalQuestions) {
+          return { kind: 'next', nextQuestionNumber };
         }
-      }, 2000);
+
+        return { kind: 'results', won: newBossHealth < newPlayerHealth };
+      })();
+
+      if (gameplaySettings.autoAdvance) {
+        setTimeout(() => performNextAction(computed), 2000);
+      } else {
+        setNextAction(computed);
+      }
 
     } catch (err: unknown) {
       console.error('Error submitting answer:', err);
@@ -245,6 +306,9 @@ function Game() {
           <div className="text-purple-300 text-sm mb-2">
             Question {gameState.currentQuestion} of {gameState.totalQuestions}
           </div>
+          <div className="text-purple-300 text-sm mb-4">
+            Difficulty: <span className="text-white font-semibold">{difficulty}</span>
+          </div>
           <h2 className="text-2xl text-white font-bold mb-4">
             {gameState.question || 'Loading question...'}
           </h2>
@@ -261,23 +325,62 @@ function Game() {
             </div>
           )}
 
-          <MicDictation value={answer} onChange={setAnswer} disabled={isLoading} />
+          {gameplaySettings.showTooltips && !gameState.feedback && (
+            <div className="mb-4 p-4 bg-purple-900 bg-opacity-40 rounded-lg border border-purple-600">
+              <div className="text-purple-200 text-sm font-semibold mb-2">STAR method quick reminder</div>
+              <ul className="text-purple-200 text-sm list-disc pl-5 space-y-1">
+                <li><b>Situation:</b> set the context (1 sentence)</li>
+                <li><b>Task:</b> what you needed to achieve</li>
+                <li><b>Action:</b> what <i>you</i> did (be specific)</li>
+                <li><b>Result:</b> measurable outcome + what you learned</li>
+              </ul>
+            </div>
+          )}
+
+          <div className={isShowingFeedback ? 'opacity-60 pointer-events-none' : ''}>
+          <MicDictation value={answer} onChange={setAnswer} disabled={isLoading || isShowingFeedback} />
 
           <textarea
             value={answer}
             onChange={(e) => setAnswer(e.target.value)}
-            className="w-full h-40 p-4 bg-purple-900 bg-opacity-50 border border-purple-600 rounded-lg text-white placeholder-purple-400 focus:outline-none focus:border-purple-400 mb-4"
+            className={`w-full ${isShowingFeedback ? 'h-24' : 'h-40'} p-4 bg-purple-900 bg-opacity-50 border border-purple-600 rounded-lg text-white placeholder-purple-400 focus:outline-none focus:border-purple-400 mb-4`}
             placeholder="Type your answer here using the STAR method (Situation, Task, Action, Result)..."
-            disabled={isLoading}
+            disabled={isLoading || isShowingFeedback}
           />
+        </div>
 
-          <button
-            onClick={submitAnswer}
-            disabled={isLoading || !answer.trim()}
-            className="w-full bg-purple-600 hover:bg-purple-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white font-bold py-3 px-6 rounded-lg transition-all duration-200 transform hover:scale-105"
-          >
-            {isLoading ? 'Submitting...' : 'Submit Answer'}
-          </button>
+        <button
+          onClick={submitAnswer}
+          disabled={
+            isLoading ||
+            isShowingFeedback ||
+            !answer.trim() ||
+            (!!nextAction && !gameplaySettings.autoAdvance)
+          }
+          className={[
+            "w-full text-white font-bold py-3 px-6 rounded-lg transition-all duration-200",
+            (isLoading || isShowingFeedback || !answer.trim() || (!!nextAction && !gameplaySettings.autoAdvance))
+              ? "bg-gray-600 cursor-not-allowed"
+              : "bg-purple-600 hover:bg-purple-700 transform hover:scale-105"
+          ].join(" ")}
+        >
+          {isLoading ? 'Submitting...' : 'Submit Answer'}
+        </button>
+
+        {isShowingFeedback && (
+          <div className="mt-3 text-xs text-purple-300">
+            Review feedback, then continue.
+          </div>
+        )}
+
+          {!gameplaySettings.autoAdvance && nextAction && (
+            <button
+              onClick={() => performNextAction(nextAction)}
+              className="w-full mt-3 bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-6 rounded-lg transition-all duration-200"
+            >
+              {nextAction.kind === 'results' ? 'View Results' : 'Next Question'}
+            </button>
+          )}
         </div>
 
         <div className="text-center">

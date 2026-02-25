@@ -157,7 +157,7 @@ hr-pg/
 - [ ] Add 16-bit retro graphics and animations
 - [ ] Include sound effects and background music
 - [ ] Expand role catalog with more positions
-- [ ] Add difficulty settings
+- [x] Add difficulty settings
 - [x] Implement database with accounts and progress tracking
 - [ ] Create user dashboard
 - [ ] Add resume-based questions and feedback

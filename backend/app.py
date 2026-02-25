@@ -8,8 +8,7 @@ import re
 from datetime import datetime
 from extensions import db, jwt, migrate
 from models import User, InterviewSession, Question, Answer, Evaluation
-from flask_jwt_extended import create_access_token, get_jwt_identity, jwt_required, get_jwt, jwt_manager
-from werkzeug.security import generate_password_hash, check_password_hash
+from flask_jwt_extended import create_access_token, get_jwt_identity, jwt_required
 
 # Load environment variables from .env file
 load_dotenv()
@@ -30,7 +29,7 @@ migrate.init_app(app, db)
 # Amplify API Configuration
 AMPLIFY_API_KEY = os.getenv("AMPLIFY_API_KEY")
 
-# Role display names and difficulty descriptions
+# Role display names and default difficulty descriptions
 ROLE_INFO = {
     "software_engineer": {
         "name": "Software Engineer",
@@ -49,6 +48,22 @@ ROLE_INFO = {
     }
 }
 
+# Supported difficulty levels (user-selectable)
+DIFFICULTY_LEVELS = {"Easy", "Medium", "Hard"}
+
+
+def normalize_difficulty(difficulty, fallback: str = "Medium") -> str:
+    """Normalize a difficulty string to one of Easy/Medium/Hard."""
+    if not difficulty:
+        return fallback
+    d = str(difficulty).strip().lower()
+    if d == "easy":
+        return "Easy"
+    if d == "medium":
+        return "Medium"
+    if d == "hard":
+        return "Hard"
+    return fallback
 
 def make_llm_request(messages):
 
@@ -241,7 +256,8 @@ def register():
         "message": "User registered successfully",
         "token": access_token, 
         "user": {"id": new_user.id, "email": new_user.email}
-    }), 201
+    })
+
 
 @app.route('/api/auth/login', methods=['POST'])
 def login():
@@ -249,33 +265,32 @@ def login():
     email = data.get('email')
     password = data.get('password')
     
+    if not email or not password:
+        return jsonify({"message": "Email and password are required"}), 400
+        
     user = User.query.filter_by(email=email).first()
     
-    if user and user.check_password(password):
-        access_token = create_access_token(identity=str(user.id))
-        return jsonify({"token": access_token, "user": {"id": user.id, "email": user.email}}), 200
+    if not user or not user.check_password(password):
+        return jsonify({"message": "Invalid email or password"}), 401
         
-    return jsonify({"message": "Invalid credentials"}), 401
-
-@app.route('/api/auth/me', methods=['GET'])
-@jwt_required(optional=True)
-def get_current_user():
-    current_user_id = get_jwt_identity()
-    if current_user_id:
-        user = User.query.get(current_user_id)
-        if user:
-            return jsonify({"user": {"id": user.id, "email": user.email}}), 200
-    return jsonify({"user": None}), 200
+    access_token = create_access_token(identity=str(user.id))
+    return jsonify({
+        "message": "Login successful",
+        "token": access_token,
+        "user": {"id": user.id, "email": user.email}
+    })
 
 
 @app.route('/api/roles', methods=['GET'])
 def get_roles():
-    roles = [
-        {"id": "software_engineer", "name": "Software Engineer", "difficulty": "Medium"},
-        {"id": "product_manager", "name": "Product Manager", "difficulty": "Hard"},
-        {"id": "data_scientist", "name": "Data Scientist", "difficulty": "Medium"}
-    ]
+    roles = [{"id": k, "name": v["name"]} for k, v in ROLE_INFO.items()]
     return jsonify(roles)
+
+
+@app.route('/api/difficulties', methods=['GET'])
+def get_difficulties():
+    """Return supported difficulty levels (UI helper endpoint)."""
+    return jsonify(["Easy", "Medium", "Hard"])
 
 
 @app.route('/api/game/start', methods=['POST'])
@@ -283,15 +298,17 @@ def get_roles():
 def start_game():
     data = request.json
     role = data.get('role', 'software_engineer')
+    requested_difficulty = data.get('difficulty')
     
     user_id = get_jwt_identity()
     
     # Create new session
     role_info = ROLE_INFO.get(role, ROLE_INFO["software_engineer"])
+    difficulty = normalize_difficulty(requested_difficulty, fallback=role_info['difficulty'])
     new_session = InterviewSession(
         user_id=int(user_id) if user_id else None,
         role=role,
-        difficulty=role_info['difficulty'],
+        difficulty=difficulty,
         status='in_progress'
     )
     
@@ -305,6 +322,7 @@ def start_game():
         "sessionId": new_session.id,
         "gameId": "game_" + role,
         "role": role,
+        "difficulty": difficulty,
         "totalQuestions": total_questions,
         "bossHealth": 100,
         "playerHealth": 100
@@ -317,9 +335,16 @@ def get_question():
     role = data.get('role', 'software_engineer')
     question_number = data.get('questionNumber', 0)
     session_id = data.get('sessionId')
+    requested_difficulty = data.get('difficulty')
 
     role_info = ROLE_INFO.get(role, ROLE_INFO["software_engineer"])
-    difficulty = role_info["difficulty"]
+    difficulty = normalize_difficulty(requested_difficulty, fallback=role_info["difficulty"])
+
+    # If a session exists, trust the session's difficulty (so refresh/reload stays consistent)
+    if session_id:
+        session = InterviewSession.query.get(session_id)
+        if session and session.difficulty:
+            difficulty = normalize_difficulty(session.difficulty, fallback=difficulty)
 
     # Try to generate a question with AI
     ai_question = generate_question_with_ai(role, question_number + 1, difficulty)
@@ -366,6 +391,7 @@ def submit_answer():
     player_health = data.get('playerHealth', 100)
     role = data.get('role', 'software_engineer')
     session_id = data.get('sessionId')
+    requested_difficulty = data.get('difficulty')
     question_id = data.get('questionId')
     question_number = data.get('questionNumber', 0)
     total_questions = data.get('totalQuestions', 5)
@@ -373,7 +399,12 @@ def submit_answer():
     user_id = get_jwt_identity()
 
     role_info = ROLE_INFO.get(role, ROLE_INFO["software_engineer"])
-    difficulty = role_info["difficulty"]
+    difficulty = normalize_difficulty(requested_difficulty, fallback=role_info["difficulty"])
+
+    if session_id:
+        session = InterviewSession.query.get(session_id)
+        if session and session.difficulty:
+            difficulty = normalize_difficulty(session.difficulty, fallback=difficulty)
 
     # Try to grade with AI
     score, ai_feedback = grade_answer_with_ai(question_text, answer_text, role, difficulty)
@@ -386,12 +417,23 @@ def submit_answer():
         }), 503
 
     # AI grading successful - use score as damage to boss
-    damage = score
+    # Difficulty modifiers: make Easy feel forgiving, Hard feel punishing.
+    if difficulty == "Easy":
+        damage = int(round(score * 1.05))
+        counter_threshold = 20
+    elif difficulty == "Hard":
+        damage = int(round(score * 0.95))
+        counter_threshold = 40
+    else:
+        damage = score
+        counter_threshold = 30
+
+    damage = max(0, min(100, damage))
     feedback = ai_feedback
 
     # If score is very low, the boss counterattacks
-    if score < 30:
-        player_damage = 30 - score  # Lower score = more player damage
+    if score < counter_threshold:
+        player_damage = counter_threshold - score  # Lower score = more player damage
         player_health -= player_damage
         feedback = f"{feedback} The boss counters for {player_damage} damage!"
 
