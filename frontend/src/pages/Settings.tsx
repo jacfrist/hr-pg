@@ -24,7 +24,7 @@ const defaultSettings: AppSettings = {
   difficultyAssist: false,
   reduceMotion: false,
   colorblindMode: false,
-  autoAdvance: true,
+  autoAdvance: false,
   showTooltips: true
 };
 
