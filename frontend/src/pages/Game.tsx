@@ -16,6 +16,7 @@ interface GameState {
 
 const GAME_STATE_KEY = 'hrpg_game_state_v1';
 const SETTINGS_KEY = 'hrpg_settings';
+const JOB_DESCRIPTION_DRAFT_KEY = 'hrpg_job_description_draft';
 
 type GameplaySettings = {
   autoAdvance: boolean;
@@ -46,6 +47,8 @@ function Game() {
   const [searchParams] = useSearchParams();
   const role = searchParams.get('role') || 'software_engineer';
   const difficulty = (searchParams.get('difficulty') || 'Medium');
+  const interviewType = (searchParams.get('interviewType') || 'role');
+  const [jobDescription, setJobDescription] = useState('');
   const { token } = useAuth();
   const [sessionId, setSessionId] = useState<number | null>(null);
   const [currentQuestionId, setCurrentQuestionId] = useState<number | null>(null);
@@ -87,6 +90,7 @@ function Game() {
         const canRestore =
           saved?.role === role &&
           saved?.difficulty === difficulty &&
+          (saved?.interviewType || 'role') === interviewType &&
           saved?.gameState &&
           typeof saved.gameState.question === 'string' &&
           saved.gameState.question.trim().length > 0;
@@ -96,6 +100,7 @@ function Game() {
           setCurrentQuestionId(saved.currentQuestionId ?? null);
           setGameState(saved.gameState);
           setAnswer(saved.answer ?? '');
+          setJobDescription(saved.jobDescription ?? '');
           setHydrated(true);
           return;
         }
@@ -106,8 +111,13 @@ function Game() {
       }
     }
 
+    let draftJobDescription = '';
     setHydrated(true);
-    startGame();
+    if (interviewType === 'job_description') {
+      draftJobDescription = localStorage.getItem(JOB_DESCRIPTION_DRAFT_KEY) || '';
+      setJobDescription(draftJobDescription);
+    }
+    startGame(draftJobDescription);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -119,6 +129,8 @@ function Game() {
     const payload = {
       role,
       difficulty,
+      interviewType,
+      jobDescription,
       sessionId,
       currentQuestionId,
       gameState,
@@ -126,7 +138,7 @@ function Game() {
     };
 
     localStorage.setItem(GAME_STATE_KEY, JSON.stringify(payload));
-  }, [hydrated, role, difficulty, sessionId, currentQuestionId, gameState, answer]);
+  }, [hydrated, role, difficulty, interviewType, jobDescription, sessionId, currentQuestionId, gameState, answer]);
 
   const performNextAction = (action: NextAction) => {
     setNextAction(null);
@@ -140,13 +152,25 @@ function Game() {
     loadNextQuestion(undefined, action.nextQuestionNumber);
   };
 
-  const startGame = async () => {
+  const startGame = async (jobDescriptionOverride?: string) => {
     setNextAction(null);
+    const effectiveJobDescription = (jobDescriptionOverride ?? jobDescription).trim();
+
+    if (interviewType === 'job_description' && !effectiveJobDescription) {
+      setError('Please go back and paste a job description before starting this interview type.');
+      return;
+    }
+
     try {
       const headers = token ? { Authorization: `Bearer ${token}` } : {};
       const response = await axios.post(
         `${API_BASE_URL}/api/game/start`,
-        { role, difficulty },
+        {
+          role,
+          difficulty,
+          interviewType,
+          jobDescription: interviewType === 'job_description' ? effectiveJobDescription : ''
+        },
         { headers }
       );
 
@@ -176,6 +200,8 @@ function Game() {
       const response = await axios.post(`${API_BASE_URL}/api/game/question`, {
         role,
         difficulty,
+        interviewType,
+        jobDescription: interviewType === 'job_description' ? jobDescription : '',
         questionNumber: questionNumber0,
         sessionId: sessionIdOverride ?? sessionId
       }, { headers });
@@ -214,6 +240,8 @@ function Game() {
         playerHealth: gameState.playerHealth,
         role,
         difficulty,
+        interviewType,
+        jobDescription: interviewType === 'job_description' ? jobDescription : '',
         sessionId,
         questionId: currentQuestionId,
         questionNumber: gameState.currentQuestion,
@@ -308,6 +336,12 @@ function Game() {
           </div>
           <div className="text-purple-300 text-sm mb-4">
             Difficulty: <span className="text-white font-semibold">{difficulty}</span>
+          </div>
+          <div className="text-purple-300 text-sm mb-4">
+            Interview type:{' '}
+            <span className="text-white font-semibold">
+              {interviewType === 'job_description' ? 'Job Description-Based' : 'Role-Based'}
+            </span>
           </div>
           <h2 className="text-2xl text-white font-bold mb-4">
             {gameState.question || 'Loading question...'}

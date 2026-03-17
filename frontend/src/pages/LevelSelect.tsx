@@ -13,6 +13,9 @@ function LevelSelect() {
   const [roles, setRoles] = useState<Role[]>([]);
   const [loading, setLoading] = useState(true);
   const [difficulty, setDifficulty] = useState<'Easy' | 'Medium' | 'Hard'>('Medium');
+  const [interviewType, setInterviewType] = useState<'role' | 'job_description'>('role');
+  const [jobDescription, setJobDescription] = useState('');
+  const [error, setError] = useState('');
 
   const fetchRoles = async () => {
     try {
@@ -31,7 +34,22 @@ function LevelSelect() {
   }, []);
 
   const selectRole = (roleId: string) => {
-    navigate(`/game?role=${roleId}&difficulty=${difficulty}`);
+    const trimmedJobDescription = jobDescription.trim();
+
+    if (interviewType === 'job_description' && !trimmedJobDescription) {
+      setError('Please paste a job description to continue.');
+      return;
+    }
+
+    setError('');
+
+    if (interviewType === 'job_description') {
+      localStorage.setItem('hrpg_job_description_draft', trimmedJobDescription);
+    } else {
+      localStorage.removeItem('hrpg_job_description_draft');
+    }
+
+    navigate(`/game?role=${roleId}&difficulty=${difficulty}&interviewType=${interviewType}`);
   };
 
   const difficultyPill = (d: 'Easy' | 'Medium' | 'Hard') => {
@@ -66,6 +84,51 @@ function LevelSelect() {
             ))}
           </div>
         </div>
+
+        {/* Interview Type Selection */}
+        <div className="mb-8 max-w-3xl mx-auto">
+          <div className="text-purple-200 text-center mb-3">Interview Type</div>
+          <div className="flex flex-wrap justify-center gap-3 mb-4">
+            <button
+              type="button"
+              className={`px-4 py-2 rounded-full text-white text-sm font-semibold border transition-all duration-150 ${interviewType === 'role' ? 'bg-indigo-600 border-indigo-400' : 'bg-indigo-900 bg-opacity-40 border-indigo-700 hover:border-indigo-400'}`}
+              onClick={() => setInterviewType('role')}
+            >
+              Role-Based (default)
+            </button>
+            <button
+              type="button"
+              className={`px-4 py-2 rounded-full text-white text-sm font-semibold border transition-all duration-150 ${interviewType === 'job_description' ? 'bg-indigo-600 border-indigo-400' : 'bg-indigo-900 bg-opacity-40 border-indigo-700 hover:border-indigo-400'}`}
+              onClick={() => setInterviewType('job_description')}
+            >
+              Job Description-Based
+            </button>
+          </div>
+
+          {interviewType === 'job_description' && (
+            <div className="bg-purple-900 bg-opacity-40 border border-purple-600 rounded-lg p-4">
+              <label htmlFor="jobDescription" className="block text-purple-200 text-sm mb-2">
+                Paste the job description you are interviewing for
+              </label>
+              <textarea
+                id="jobDescription"
+                value={jobDescription}
+                onChange={(e) => setJobDescription(e.target.value)}
+                className="w-full h-36 p-3 bg-purple-900 bg-opacity-60 border border-purple-600 rounded-lg text-white placeholder-purple-400 focus:outline-none focus:border-purple-400"
+                placeholder="Paste responsibilities, requirements, and preferred qualifications..."
+              />
+              <p className="text-xs text-purple-300 mt-2">
+                Questions will be generated based on this posting while still matching your selected role and difficulty.
+              </p>
+            </div>
+          )}
+        </div>
+
+        {error && (
+          <div className="mb-6 text-center">
+            <p className="inline-block px-4 py-2 rounded-lg bg-red-900 bg-opacity-50 border border-red-500 text-red-200 text-sm">{error}</p>
+          </div>
+        )}
 
         {loading ? (
           <div className="text-center text-white text-xl">Loading roles...</div>
