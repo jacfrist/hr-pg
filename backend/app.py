@@ -531,6 +531,56 @@ def submit_answer():
         "feedback": feedback
     })
 
+@app.route('/api/game/results/<int:session_id>', methods=['GET'])
+@jwt_required(optional=True)
+def get_game_results(session_id):
+    session = InterviewSession.query.get(session_id)
+
+    if not session:
+        return jsonify({"message": "Session not found"}), 404
+
+    questions = (
+        Question.query
+        .filter_by(session_id=session_id)
+        .order_by(Question.turn_index.asc())
+        .all()
+    )
+
+    items = []
+
+    for question in questions:
+        answer = (
+            Answer.query
+            .filter_by(question_id=question.id)
+            .order_by(Answer.id.desc())
+            .first()
+        )
+
+        evaluation = None
+        if answer:
+            evaluation = (
+                Evaluation.query
+                .filter_by(answer_id=answer.id)
+                .order_by(Evaluation.id.desc())
+                .first()
+            )
+
+        items.append({
+            "questionNumber": question.turn_index,
+            "question": question.prompt_text,
+            "answer": answer.answer_text if answer else "",
+            "feedback": evaluation.feedback_text if evaluation else "",
+            "score": evaluation.impact_score if evaluation else None
+        })
+
+    return jsonify({
+        "sessionId": session.id,
+        "role": session.role,
+        "difficulty": session.difficulty,
+        "status": session.status,
+        "questions": items
+    })
+
 
 @app.route('/api/history', methods=['GET'])
 @jwt_required()
