@@ -481,6 +481,17 @@ def submit_answer():
             updated_player_health = max(0, player_health - player_damage)
             feedback = f"{feedback} The boss counters for {player_damage} damage!"
     
+    # Fallback: recover question_id if missing (happens for first question sometimes)
+    if not question_id and session_id and question_number:
+        existing_question = (
+            Question.query
+            .filter_by(session_id=session_id, turn_index=question_number)
+            .order_by(Question.id.desc())
+            .first()
+        )
+        if existing_question:
+            question_id = existing_question.id
+
 
     # Save answer and evaluation to DB
     if question_id:
