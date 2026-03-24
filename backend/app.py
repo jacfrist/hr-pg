@@ -136,11 +136,37 @@ def make_llm_request(messages):
         return None
 
 
-def generate_question_with_ai(role, question_number, difficulty):
+def generate_question_with_ai(role, question_number, difficulty, interview_type="role", job_description=""):
     """Generate an interview question using the Amplify AI."""
     role_info = ROLE_INFO.get(role, ROLE_INFO["software_engineer"])
 
-    prompt = f"""You are an expert interviewer for {role_info['description']}.
+    interview_mode = "job_description" if str(interview_type).strip().lower() == "job_description" else "role"
+    jd_text = (job_description or "").strip()
+
+    if interview_mode == "job_description" and jd_text:
+        prompt = f"""You are an expert interviewer for {role_info['description']}.
+
+Generate a behavioral interview question for a candidate. This is question {question_number} of the interview.
+
+Role: {role_info['name']}
+Difficulty: {difficulty}
+Interview Type: Job Description-Based
+
+Job Description:
+{jd_text}
+
+Requirements:
+- The question must be directly grounded in the provided job description
+- Focus on responsibilities, required skills, domain context, and success criteria from the posting
+- Ask one clear behavioral question that tests fit for the actual role
+- The question should be appropriate for the {difficulty} difficulty level
+- For "Easy" difficulty: Ask straightforward questions about basic experiences
+- For "Medium" difficulty: Ask about specific challenges and how they were handled
+- For "Hard" difficulty: Ask complex scenario-based questions requiring deep thinking
+
+Respond with ONLY the interview question, nothing else. Do not include any preamble or explanation."""
+    else:
+        prompt = f"""You are an expert interviewer for {role_info['description']}.
 
 Generate a behavioral interview question for a candidate. This is question {question_number} of the interview.
 
@@ -299,6 +325,8 @@ def start_game():
     data = request.json
     role = data.get('role', 'software_engineer')
     requested_difficulty = data.get('difficulty')
+    interview_type = data.get('interviewType', 'role')
+    job_description = data.get('jobDescription', '')
     
     user_id = get_jwt_identity()
     
@@ -323,6 +351,8 @@ def start_game():
         "gameId": "game_" + role,
         "role": role,
         "difficulty": difficulty,
+        "interviewType": "job_description" if str(interview_type).strip().lower() == "job_description" else "role",
+        "jobDescriptionProvided": bool(str(job_description).strip()),
         "totalQuestions": total_questions,
         "bossHealth": 100,
         "playerHealth": 100
@@ -336,6 +366,8 @@ def get_question():
     question_number = data.get('questionNumber', 0)
     session_id = data.get('sessionId')
     requested_difficulty = data.get('difficulty')
+    interview_type = data.get('interviewType', 'role')
+    job_description = data.get('jobDescription', '')
 
     role_info = ROLE_INFO.get(role, ROLE_INFO["software_engineer"])
     difficulty = normalize_difficulty(requested_difficulty, fallback=role_info["difficulty"])
@@ -347,7 +379,13 @@ def get_question():
             difficulty = normalize_difficulty(session.difficulty, fallback=difficulty)
 
     # Try to generate a question with AI
-    ai_question = generate_question_with_ai(role, question_number + 1, difficulty)
+    ai_question = generate_question_with_ai(
+        role,
+        question_number + 1,
+        difficulty,
+        interview_type=interview_type,
+        job_description=job_description
+    )
 
     if not ai_question:
         return jsonify({
