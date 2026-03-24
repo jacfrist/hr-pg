@@ -5,6 +5,8 @@ function Results() {
   const [searchParams] = useSearchParams();
   const won = searchParams.get('won') === 'true';
   const role = searchParams.get('role') || 'software_engineer';
+  const mode = (searchParams.get('mode') || 'classic') as 'classic' | 'practice';
+  const isPracticeMode = mode === 'practice';
 
   const formatRole = (roleId: string) => {
     return roleId
@@ -16,7 +18,21 @@ function Results() {
   return (
     <div className="min-h-screen bg-gradient-to-b from-purple-900 via-purple-800 to-indigo-900 flex items-center justify-center p-4 pt-20">
       <div className="max-w-2xl w-full text-center">
-        {won ? (
+        {isPracticeMode ? (
+          <div className="space-y-6">
+            <div className="text-6xl mb-4">🧠</div>
+            <h1 className="text-5xl font-bold text-white mb-4">Practice Session Complete</h1>
+            <p className="text-2xl text-purple-200 mb-6">
+              Nice work practicing for the {formatRole(role)} interview.
+            </p>
+            <div className="bg-purple-800 bg-opacity-50 rounded-lg p-6 backdrop-blur-sm border border-purple-600 mb-6">
+              <p className="text-purple-200 text-lg">
+                You completed a feedback-focused practice run. Review what worked,
+                refine your examples, and jump back in when you're ready.
+              </p>
+            </div>
+          </div>
+        ) : won ? (
           <div className="space-y-6">
             <div className="text-6xl mb-4">🎉</div>
             <h1 className="text-5xl font-bold text-white mb-4">You Got the Job!</h1>
@@ -51,7 +67,7 @@ function Results() {
             onClick={() => navigate('/level-select')}
             className="bg-purple-600 hover:bg-purple-700 text-white font-bold py-4 px-8 rounded-lg text-xl transition-all duration-200 transform hover:scale-105 shadow-lg w-full sm:w-auto"
           >
-            Play Again
+            {isPracticeMode ? 'Practice Again' : 'Play Again'}
           </button>
           <br />
           <button

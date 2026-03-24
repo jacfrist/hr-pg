@@ -147,7 +147,7 @@ function Game() {
     setNextAction(null);
 
     if (action.kind === 'results') {
-      navigate(`/results?won=${action.won}&role=${role}`);
+      navigate(`/results?won=${action.won}&role=${role}&mode=${mode}`);
       localStorage.removeItem(GAME_STATE_KEY);
       return;
     }
