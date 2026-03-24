@@ -172,6 +172,7 @@ function Game() {
         {
           role,
           difficulty,
+          mode,
           interviewType,
           jobDescription: interviewType === 'job_description' ? effectiveJobDescription : ''
         },
@@ -204,6 +205,7 @@ function Game() {
       const response = await axios.post(`${API_BASE_URL}/api/game/question`, {
         role,
         difficulty,
+        mode,
         interviewType,
         jobDescription: interviewType === 'job_description' ? jobDescription : '',
         questionNumber: questionNumber0,
@@ -245,6 +247,7 @@ function Game() {
         role,
         difficulty,
         interviewType,
+        mode,
         jobDescription: interviewType === 'job_description' ? jobDescription : '',
         sessionId,
         questionId: currentQuestionId,

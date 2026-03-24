@@ -136,37 +136,11 @@ def make_llm_request(messages):
         return None
 
 
-def generate_question_with_ai(role, question_number, difficulty, interview_type="role", job_description=""):
+def generate_question_with_ai(role, question_number, difficulty):
     """Generate an interview question using the Amplify AI."""
     role_info = ROLE_INFO.get(role, ROLE_INFO["software_engineer"])
 
-    interview_mode = "job_description" if str(interview_type).strip().lower() == "job_description" else "role"
-    jd_text = (job_description or "").strip()
-
-    if interview_mode == "job_description" and jd_text:
-        prompt = f"""You are an expert interviewer for {role_info['description']}.
-
-Generate a behavioral interview question for a candidate. This is question {question_number} of the interview.
-
-Role: {role_info['name']}
-Difficulty: {difficulty}
-Interview Type: Job Description-Based
-
-Job Description:
-{jd_text}
-
-Requirements:
-- The question must be directly grounded in the provided job description
-- Focus on responsibilities, required skills, domain context, and success criteria from the posting
-- Ask one clear behavioral question that tests fit for the actual role
-- The question should be appropriate for the {difficulty} difficulty level
-- For "Easy" difficulty: Ask straightforward questions about basic experiences
-- For "Medium" difficulty: Ask about specific challenges and how they were handled
-- For "Hard" difficulty: Ask complex scenario-based questions requiring deep thinking
-
-Respond with ONLY the interview question, nothing else. Do not include any preamble or explanation."""
-    else:
-        prompt = f"""You are an expert interviewer for {role_info['description']}.
+    prompt = f"""You are an expert interviewer for {role_info['description']}.
 
 Generate a behavioral interview question for a candidate. This is question {question_number} of the interview.
 
@@ -196,11 +170,47 @@ Respond with ONLY the interview question, nothing else. Do not include any pream
     return None
 
 
-def grade_answer_with_ai(question, answer, role, difficulty):
+def grade_answer_with_ai(question, answer, role, difficulty, mode="classic"):
     """Grade a candidate's answer using the Amplify AI."""
     role_info = ROLE_INFO.get(role, ROLE_INFO["software_engineer"])
+    normalized_mode = "practice" if str(mode).strip().lower() == "practice" else "classic"
 
-    prompt = f"""You are an expert interviewer evaluating a candidate's response for {role_info['description']}.
+    if normalized_mode == "practice":
+        prompt = f"""You are an expert interview coach evaluating a candidate's response for {role_info['description']}.
+
+Interview Question: {question}
+
+Candidate's Answer: {answer}
+
+Role: {role_info['name']}
+Difficulty Level: {difficulty}
+Mode: Practice
+
+Please evaluate this answer and provide a score from 0 to 10 based on:
+- Relevance to the question
+- Depth and specificity of the response
+- Use of concrete examples
+- Communication clarity and structure
+
+For {difficulty} difficulty:
+- Easy: Be more lenient in scoring
+- Medium: Use standard evaluation criteria
+- Hard: Be more rigorous in evaluation
+
+IMPORTANT:
+- Give constructive coaching feedback in 1-2 sentences
+- Do NOT mention damage, health, boss battles, counters, wins, losses, or any game mechanics
+- Focus only on interview quality and how to improve the answer
+
+You must respond in this EXACT format:
+SCORE: [number]
+FEEDBACK: [your feedback in 1-2 sentences]
+
+Example response:
+SCORE: 7
+FEEDBACK: Good use of a relevant example and clear structure. To strengthen this response, add a more measurable result and clarify your personal impact."""
+    else:
+        prompt = f"""You are an expert interviewer evaluating a candidate's response for {role_info['description']}.
 
 Interview Question: {question}
 
@@ -234,16 +244,14 @@ FEEDBACK: Good use of the STAR method with a relevant example, but could have el
 
     if response:
         try:
-            # Parse the score from the response
             score_match = re.search(r'SCORE:\s*(\d+)', response, re.IGNORECASE)
             feedback_match = re.search(r'FEEDBACK:\s*(.+)', response, re.IGNORECASE | re.DOTALL)
 
             if score_match:
                 score = int(score_match.group(1))
-                score = max(0, min(100, score))  # Clamp between 0-100
+                score = max(0, min(10, score))
 
                 feedback = feedback_match.group(1).strip() if feedback_match else "Answer evaluated."
-                # Clean up feedback - take only first 1-2 sentences
                 feedback = feedback.split('\n')[0].strip()
 
                 return score, feedback
@@ -325,8 +333,6 @@ def start_game():
     data = request.json
     role = data.get('role', 'software_engineer')
     requested_difficulty = data.get('difficulty')
-    interview_type = data.get('interviewType', 'role')
-    job_description = data.get('jobDescription', '')
     
     user_id = get_jwt_identity()
     
@@ -351,8 +357,6 @@ def start_game():
         "gameId": "game_" + role,
         "role": role,
         "difficulty": difficulty,
-        "interviewType": "job_description" if str(interview_type).strip().lower() == "job_description" else "role",
-        "jobDescriptionProvided": bool(str(job_description).strip()),
         "totalQuestions": total_questions,
         "bossHealth": 100,
         "playerHealth": 100
@@ -366,8 +370,6 @@ def get_question():
     question_number = data.get('questionNumber', 0)
     session_id = data.get('sessionId')
     requested_difficulty = data.get('difficulty')
-    interview_type = data.get('interviewType', 'role')
-    job_description = data.get('jobDescription', '')
 
     role_info = ROLE_INFO.get(role, ROLE_INFO["software_engineer"])
     difficulty = normalize_difficulty(requested_difficulty, fallback=role_info["difficulty"])
@@ -379,13 +381,7 @@ def get_question():
             difficulty = normalize_difficulty(session.difficulty, fallback=difficulty)
 
     # Try to generate a question with AI
-    ai_question = generate_question_with_ai(
-        role,
-        question_number + 1,
-        difficulty,
-        interview_type=interview_type,
-        job_description=job_description
-    )
+    ai_question = generate_question_with_ai(role, question_number + 1, difficulty)
 
     if not ai_question:
         return jsonify({
@@ -433,6 +429,8 @@ def submit_answer():
     question_id = data.get('questionId')
     question_number = data.get('questionNumber', 0)
     total_questions = data.get('totalQuestions', 5)
+    mode = data.get('mode', 'classic')
+    is_practice_mode = str(mode).strip().lower() == 'practice'
     
     user_id = get_jwt_identity()
 
@@ -445,7 +443,7 @@ def submit_answer():
             difficulty = normalize_difficulty(session.difficulty, fallback=difficulty)
 
     # Try to grade with AI
-    score, ai_feedback = grade_answer_with_ai(question_text, answer_text, role, difficulty)
+    score, ai_feedback = grade_answer_with_ai(question_text, answer_text, role, difficulty, mode=mode)
 
     if score is None:
         # AI grading failed - return error
@@ -454,30 +452,36 @@ def submit_answer():
             "message": "Unable to grade your answer. Please check your API configuration and try again."
         }), 503
 
-    # AI grading successful - use score as damage to boss
-    # Difficulty modifiers: make Easy feel forgiving, Hard feel punishing.
-    if difficulty == "Easy":
-        damage = int(round(score * 1.05))
-        counter_threshold = 20
-    elif difficulty == "Hard":
-        damage = int(round(score * 0.95))
-        counter_threshold = 40
-    else:
-        damage = score
-        counter_threshold = 30
-
-    damage = max(0, min(100, damage))
     feedback = ai_feedback
 
-    # If score is very low, the boss counterattacks
-    if score < counter_threshold:
-        player_damage = counter_threshold - score  # Lower score = more player damage
-        player_health -= player_damage
-        feedback = f"{feedback} The boss counters for {player_damage} damage!"
+    if is_practice_mode:
+        damage = 0
+        updated_boss_health = boss_health
+        updated_player_health = player_health
+    else:
+        # AI grading successful - use score as damage to boss
+        # Difficulty modifiers: make Easy feel forgiving, Hard feel punishing.
+        if difficulty == "Easy":
+            damage = int(round(score * 1.05))
+            counter_threshold = 20
+        elif difficulty == "Hard":
+            damage = int(round(score * 0.95))
+            counter_threshold = 40
+        else:
+            damage = score
+            counter_threshold = 30
 
-    boss_health = max(0, boss_health - damage)
-    player_health = max(0, player_health)
+        damage = max(0, min(100, damage))
+        updated_boss_health = max(0, boss_health - damage)
+        updated_player_health = max(0, player_health)
+
+        # If score is very low, the boss counterattacks
+        if score < counter_threshold:
+            player_damage = counter_threshold - score
+            updated_player_health = max(0, player_health - player_damage)
+            feedback = f"{feedback} The boss counters for {player_damage} damage!"
     
+
     # Save answer and evaluation to DB
     if question_id:
         answer_entry = Answer(
@@ -487,41 +491,43 @@ def submit_answer():
         )
         db.session.add(answer_entry)
         db.session.commit()
-        
+
         evaluation = Evaluation(
             answer_id=answer_entry.id,
             impact_score=score,
             feedback_text=feedback
         )
         db.session.add(evaluation)
-        
-        # Update session status if game over
+
         if session_id:
             session = InterviewSession.query.get(session_id)
             if session:
-                # Check if this was the last question
                 is_last_question = question_number >= total_questions
-                
-                if boss_health <= 0:
-                    session.status = 'completed_won'
-                    session.ended_at = datetime.utcnow()
-                elif player_health <= 0:
-                    session.status = 'completed_lost'
-                    session.ended_at = datetime.utcnow()
-                elif is_last_question:
-                    # Game finished all questions, determine winner by health
-                    if boss_health < player_health:
+
+                if is_practice_mode:
+                    if is_last_question:
                         session.status = 'completed_won'
-                    else:
+                        session.ended_at = datetime.utcnow()
+                else:
+                    if updated_boss_health <= 0:
+                        session.status = 'completed_won'
+                        session.ended_at = datetime.utcnow()
+                    elif updated_player_health <= 0:
                         session.status = 'completed_lost'
-                    session.ended_at = datetime.utcnow()
-        
+                        session.ended_at = datetime.utcnow()
+                    elif is_last_question:
+                        if updated_boss_health < updated_player_health:
+                            session.status = 'completed_won'
+                        else:
+                            session.status = 'completed_lost'
+                        session.ended_at = datetime.utcnow()
+
         db.session.commit()
 
     return jsonify({
         "damage": damage,
-        "bossHealth": boss_health,
-        "playerHealth": player_health,
+        "bossHealth": updated_boss_health,
+        "playerHealth": updated_player_health,
         "feedback": feedback
     })
 
