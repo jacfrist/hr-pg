@@ -15,6 +15,7 @@ function LevelSelect() {
   const [difficulty, setDifficulty] = useState<'Easy' | 'Medium' | 'Hard'>('Medium');
   const [interviewType, setInterviewType] = useState<'role' | 'job_description'>('role');
   const [jobDescription, setJobDescription] = useState('');
+  const [mode, setMode] = useState<'classic' | 'practice'>('classic');
   const [error, setError] = useState('');
 
   const fetchRoles = async () => {
@@ -49,7 +50,7 @@ function LevelSelect() {
       localStorage.removeItem('hrpg_job_description_draft');
     }
 
-    navigate(`/game?role=${roleId}&difficulty=${difficulty}&interviewType=${interviewType}`);
+    navigate(`/game?role=${roleId}&difficulty=${difficulty}&interviewType=${interviewType}&mode=${mode}`);
   };
 
   const difficultyPill = (d: 'Easy' | 'Medium' | 'Hard') => {
@@ -58,6 +59,17 @@ function LevelSelect() {
     if (d === 'Easy') return `${base} ${active ? 'bg-green-600 border-green-400' : 'bg-green-900 bg-opacity-40 border-green-700 hover:border-green-400'}`;
     if (d === 'Hard') return `${base} ${active ? 'bg-red-600 border-red-400' : 'bg-red-900 bg-opacity-40 border-red-700 hover:border-red-400'}`;
     return `${base} ${active ? 'bg-yellow-600 border-yellow-400' : 'bg-yellow-900 bg-opacity-40 border-yellow-700 hover:border-yellow-400'}`;
+  };
+
+  const modePill = (m: 'classic' | 'practice') => {
+    const active = m === mode;
+    const base = 'px-4 py-2 rounded-full text-white text-sm font-semibold transition-all duration-150 border';
+
+    return `${base} ${
+      active
+        ? 'bg-cyan-600 border-cyan-400'
+        : 'bg-cyan-900 bg-opacity-40 border-cyan-700 hover:border-cyan-400'
+    }`;
   };
 
   return (
@@ -83,6 +95,32 @@ function LevelSelect() {
               </button>
             ))}
           </div>
+        </div>
+
+        {/* Mode Selection */}
+        <div className="mb-8 flex flex-col items-center gap-3">
+          <div className="text-purple-200">Mode</div>
+          <div className="flex gap-3 flex-wrap justify-center">
+            <button
+              type="button"
+              className={modePill('classic')}
+              onClick={() => setMode('classic')}
+            >
+              Classic
+            </button>
+            <button
+              type="button"
+              className={modePill('practice')}
+              onClick={() => setMode('practice')}
+            >
+              Practice
+            </button>
+          </div>
+          <p className="text-sm text-purple-300 text-center max-w-xl">
+            {mode === 'practice'
+              ? 'Practice mode focuses on feedback and learning after each answer.'
+              : 'Classic mode keeps the original interview battle experience.'}
+          </p>
         </div>
 
         {/* Interview Type Selection */}
@@ -140,8 +178,13 @@ function LevelSelect() {
                 className="bg-purple-800 bg-opacity-50 rounded-lg p-6 backdrop-blur-sm border border-purple-600 hover:border-purple-400 transition-all duration-200"
               >
                 <h3 className="text-2xl font-bold text-white mb-3">{role.name}</h3>
-                <div className="mb-4 text-sm text-purple-300">
-                  Selected difficulty: <span className="text-white font-semibold">{difficulty}</span>
+                <div className="mb-4 text-sm text-purple-300 space-y-1">
+                  <div>
+                    Selected difficulty: <span className="text-white font-semibold">{difficulty}</span>
+                  </div>
+                  <div>
+                    Selected mode: <span className="text-white font-semibold capitalize">{mode}</span>
+                  </div>
                 </div>
                 <button
                   onClick={() => selectRole(role.id)}
