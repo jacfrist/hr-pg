@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import axios from 'axios';
 import { API_BASE_URL } from '../config';
@@ -55,6 +55,7 @@ function Game() {
   const [sessionId, setSessionId] = useState<number | null>(null);
   const [currentQuestionId, setCurrentQuestionId] = useState<number | null>(null);
   const [hydrated, setHydrated] = useState(false);
+  const initializationStarted = useRef(false);
 
   const [gameState, setGameState] = useState<GameState>({
     bossHealth: 100,
@@ -113,6 +114,9 @@ function Game() {
         localStorage.removeItem(GAME_STATE_KEY);
       }
     }
+
+    if (initializationStarted.current) return;
+    initializationStarted.current = true;
 
     let draftJobDescription = '';
     setHydrated(true);

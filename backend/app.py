@@ -481,7 +481,14 @@ def submit_answer():
             updated_player_health = max(0, player_health - player_damage)
             feedback = f"{feedback} The boss counters for {player_damage} damage!"
     
-    # Fallback: recover question_id if missing (happens for first question sometimes)
+    # Security/consistency: Ensure provided question_id actually belongs to the provided session_id
+    if question_id and session_id:
+        q = Question.query.get(question_id)
+        if q and q.session_id != session_id:
+            # Mismatch due to client race condition; force recovery
+            question_id = None
+
+    # Fallback: recover question_id if missing or mismatched
     if not question_id and session_id and question_number:
         existing_question = (
             Question.query
