@@ -5,6 +5,7 @@ import requests
 import json
 import os
 import re
+import time
 from datetime import datetime
 from extensions import db, jwt, migrate
 from models import User, InterviewSession, Question, Answer, Evaluation
@@ -65,19 +66,19 @@ def normalize_difficulty(difficulty, fallback: str = "Medium") -> str:
         return "Hard"
     return fallback
 
-def make_llm_request(messages):
+def make_llm_request(messages, max_retries=3, backoff_factor=1.5):
 
     # Validate input
     if not messages:
-        print("Error: Messages list cannot be empty")
+        app.logger.error("Messages list cannot be empty")
         return None
 
     if not isinstance(messages, list):
-        print("Error: Messages must be a list")
+        app.logger.error("Messages must be a list")
         return None
 
     if not AMPLIFY_API_KEY:
-        print("Error: AMPLIFY_API_KEY not found in environment variables")
+        app.logger.error("AMPLIFY_API_KEY not found in environment variables")
         return None
 
     url = "https://prod-api.vanderbilt.ai/chat"
@@ -100,40 +101,45 @@ def make_llm_request(messages):
         }
     }
 
-    try:
-        response = requests.post(
-            url, headers=headers, data=json.dumps(payload), timeout=30
-        )
+    delay = 1.0
+    for attempt in range(max_retries):
+        try:
+            response = requests.post(
+                url, headers=headers, data=json.dumps(payload), timeout=30
+            )
 
-        if response.status_code == 200:
-            try:
-                response_data = response.json()
-                txt = response_data.get("data", "")
-                if txt:
-                    return txt
-                else:
-                    print("Warning: Empty response received from API")
+            if response.status_code == 200:
+                try:
+                    response_data = response.json()
+                    txt = response_data.get("data", "")
+                    if txt:
+                        return txt
+                    else:
+                        app.logger.warning("Empty response received from API")
+                        return None
+                except json.JSONDecodeError as e:
+                    app.logger.error(f"Failed to parse JSON response: {e}")
                     return None
-            except json.JSONDecodeError as e:
-                print(f"Error: Failed to parse JSON response: {e}")
-                return None
 
-        else:
-            print(f"Error: Request failed with status code {response.status_code}")
-            return None
+            else:
+                app.logger.error(f"Request failed with status code {response.status_code}. Response: {response.text}")
 
-    except requests.exceptions.Timeout:
-        print("Error: Request timed out")
-        return None
-    except requests.exceptions.ConnectionError:
-        print("Error: Connection failed")
-        return None
-    except requests.exceptions.RequestException as e:
-        print(f"Error: Request failed - {e}")
-        return None
-    except Exception as e:
-        print(f"Error: Unexpected error occurred - {e}")
-        return None
+        except requests.exceptions.Timeout:
+            app.logger.error(f"Attempt {attempt + 1}: Request timed out")
+        except requests.exceptions.ConnectionError:
+            app.logger.error(f"Attempt {attempt + 1}: Connection failed")
+        except requests.exceptions.RequestException as e:
+            app.logger.error(f"Attempt {attempt + 1}: Request failed - {e}")
+        except Exception as e:
+            app.logger.error(f"Attempt {attempt + 1}: Unexpected error occurred - {e}")
+            
+        if attempt < max_retries - 1:
+            app.logger.info(f"Retrying in {delay} seconds...")
+            time.sleep(delay)
+            delay *= backoff_factor
+
+    app.logger.error("All retries exhausted for LLM request.")
+    return None
 
 
 def generate_question_with_ai(role, question_number, difficulty):
@@ -269,20 +275,28 @@ def health_check():
 @app.route('/api/auth/register', methods=['POST'])
 def register():
     data = request.json
+    if not data or not isinstance(data, dict):
+        return jsonify({"message": "Invalid JSON payload"}), 400
+
     email = data.get('email')
     password = data.get('password')
     
-    if not email or not password:
-        return jsonify({"message": "Email and password are required"}), 400
+    if not email or not isinstance(email, str) or not password or not isinstance(password, str):
+        return jsonify({"message": "Valid email and password are required"}), 400
         
     if User.query.filter_by(email=email).first():
         return jsonify({"message": "Email already registered"}), 400
         
-    new_user = User(email=email)
-    new_user.set_password(password)
-    
-    db.session.add(new_user)
-    db.session.commit()
+    try:
+        new_user = User(email=email)
+        new_user.set_password(password)
+        
+        db.session.add(new_user)
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        app.logger.error(f"Database error during registration: {e}")
+        return jsonify({"message": "An error occurred during registration"}), 500
     
     # Auto-login after registration
     access_token = create_access_token(identity=str(new_user.id))
@@ -296,11 +310,14 @@ def register():
 @app.route('/api/auth/login', methods=['POST'])
 def login():
     data = request.json
+    if not data or not isinstance(data, dict):
+        return jsonify({"message": "Invalid JSON payload"}), 400
+
     email = data.get('email')
     password = data.get('password')
     
-    if not email or not password:
-        return jsonify({"message": "Email and password are required"}), 400
+    if not email or not isinstance(email, str) or not password or not isinstance(password, str):
+        return jsonify({"message": "Valid email and password are required"}), 400
         
     user = User.query.filter_by(email=email).first()
     
@@ -331,14 +348,20 @@ def get_difficulties():
 @jwt_required(optional=True)
 def start_game():
     data = request.json
+    if not data or not isinstance(data, dict):
+        return jsonify({"message": "Invalid JSON payload"}), 400
+
     role = data.get('role', 'software_engineer')
+    if role not in ROLE_INFO:
+        return jsonify({"message": "Invalid role specified"}), 400
+
     requested_difficulty = data.get('difficulty')
     mode = data.get('mode', 'classic')
     
     user_id = get_jwt_identity()
     
     # Create new session
-    role_info = ROLE_INFO.get(role, ROLE_INFO["software_engineer"])
+    role_info = ROLE_INFO[role]
     difficulty = normalize_difficulty(requested_difficulty, fallback=role_info['difficulty'])
     new_session = InterviewSession(
         user_id=int(user_id) if user_id else None,
@@ -348,8 +371,13 @@ def start_game():
         status='in_progress'
     )
     
-    db.session.add(new_session)
-    db.session.commit()
+    try:
+        db.session.add(new_session)
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        app.logger.error(f"Database error during game start: {e}")
+        return jsonify({"message": "Failed to start game"}), 500
 
     # Default to 5 questions per game
     total_questions = 5
@@ -368,12 +396,28 @@ def start_game():
 @app.route('/api/game/question', methods=['POST'])
 def get_question():
     data = request.json
+    if not data or not isinstance(data, dict):
+        return jsonify({"message": "Invalid JSON payload"}), 400
+
     role = data.get('role', 'software_engineer')
-    question_number = data.get('questionNumber', 0)
+    if role not in ROLE_INFO:
+        return jsonify({"message": "Invalid role specified"}), 400
+
+    try:
+        question_number = int(data.get('questionNumber', 0))
+    except (TypeError, ValueError):
+        return jsonify({"message": "questionNumber must be an integer"}), 400
+
     session_id = data.get('sessionId')
+    if session_id is not None:
+        try:
+            session_id = int(session_id)
+        except (TypeError, ValueError):
+            return jsonify({"message": "sessionId must be an integer"}), 400
+
     requested_difficulty = data.get('difficulty')
 
-    role_info = ROLE_INFO.get(role, ROLE_INFO["software_engineer"])
+    role_info = ROLE_INFO[role]
     difficulty = normalize_difficulty(requested_difficulty, fallback=role_info["difficulty"])
 
     # If a session exists, trust the session's difficulty (so refresh/reload stays consistent)
@@ -393,22 +437,28 @@ def get_question():
         
     # Save question to DB if session exists
     if session_id:
-        question = Question(
-            session_id=session_id,
-            turn_index=question_number + 1,
-            question_type="behavioral", # Default for now
-            prompt_text=ai_question
-        )
-        db.session.add(question)
-        db.session.commit()
-        
-        # Return question ID so answer can be linked
-        return jsonify({
-            "questionId": question.id,
-            "questionNumber": question_number + 1,
-            "question": ai_question,
-            "totalQuestions": 5
-        })
+        try:
+            question = Question(
+                session_id=session_id,
+                turn_index=question_number + 1,
+                question_type="behavioral", # Default for now
+                prompt_text=ai_question
+            )
+            db.session.add(question)
+            db.session.commit()
+            
+            # Return question ID so answer can be linked
+            return jsonify({
+                "questionId": question.id,
+                "questionNumber": question_number + 1,
+                "question": ai_question,
+                "totalQuestions": 5
+            })
+        except Exception as e:
+            db.session.rollback()
+            app.logger.error(f"Database error saving question: {e}")
+            # Still return the question even if saving fails
+            pass
 
     return jsonify({
         "questionNumber": question_number + 1,
@@ -421,22 +471,50 @@ def get_question():
 @jwt_required(optional=True)
 def submit_answer():
     data = request.json
+    if not data or not isinstance(data, dict):
+        return jsonify({"message": "Invalid JSON payload"}), 400
+
     answer_text = data.get('answer', '')
     question_text = data.get('question', '')
-    boss_health = data.get('bossHealth', 100)
-    player_health = data.get('playerHealth', 100)
+    
+    if not isinstance(answer_text, str) or not isinstance(question_text, str):
+        return jsonify({"message": "Answer and question must be strings"}), 400
+
+    try:
+        boss_health = int(data.get('bossHealth', 100))
+        player_health = int(data.get('playerHealth', 100))
+        question_number = int(data.get('questionNumber', 0))
+        total_questions = int(data.get('totalQuestions', 5))
+    except (TypeError, ValueError):
+        return jsonify({"message": "Health values and question numbers must be integers"}), 400
+
     role = data.get('role', 'software_engineer')
+    if role not in ROLE_INFO:
+        return jsonify({"message": "Invalid role specified"}), 400
+
     session_id = data.get('sessionId')
-    requested_difficulty = data.get('difficulty')
     question_id = data.get('questionId')
     question_number = data.get('questionNumber', 0)
     total_questions = data.get('totalQuestions', 5)
     mode = data.get('mode', 'classic')
     is_practice_mode = str(mode).strip().lower() == 'practice'
     
+    if session_id is not None:
+        try:
+            session_id = int(session_id)
+        except ValueError:
+            return jsonify({"message": "sessionId must be an integer"}), 400
+            
+    if question_id is not None:
+        try:
+            question_id = int(question_id)
+        except ValueError:
+            return jsonify({"message": "questionId must be an integer"}), 400
+    
+    requested_difficulty = data.get('difficulty')
     user_id = get_jwt_identity()
 
-    role_info = ROLE_INFO.get(role, ROLE_INFO["software_engineer"])
+    role_info = ROLE_INFO[role]
     difficulty = normalize_difficulty(requested_difficulty, fallback=role_info["difficulty"])
 
     if session_id:
@@ -504,45 +582,52 @@ def submit_answer():
 
     # Save answer and evaluation to DB
     if question_id:
-        answer_entry = Answer(
-            question_id=question_id,
-            user_id=int(user_id) if user_id else None,
-            answer_text=answer_text
-        )
-        db.session.add(answer_entry)
-        db.session.commit()
-
-        evaluation = Evaluation(
-            answer_id=answer_entry.id,
-            impact_score=score,
-            feedback_text=feedback
-        )
-        db.session.add(evaluation)
-
-        if session_id:
-            session = db.session.get(InterviewSession, session_id)
-            if session:
-                is_last_question = question_number >= total_questions
-
-                if is_practice_mode:
-                    if is_last_question:
-                        session.status = 'completed_won'
-                        session.ended_at = datetime.utcnow()
-                else:
-                    if updated_boss_health <= 0:
-                        session.status = 'completed_won'
-                        session.ended_at = datetime.utcnow()
-                    elif updated_player_health <= 0:
-                        session.status = 'completed_lost'
-                        session.ended_at = datetime.utcnow()
-                    elif is_last_question:
+        try:
+            answer_entry = Answer(
+                question_id=question_id,
+                user_id=int(user_id) if user_id else None,
+                answer_text=answer_text
+            )
+            db.session.add(answer_entry)
+            db.session.flush() # flush to get answer_entry.id
+            
+            evaluation = Evaluation(
+                answer_id=answer_entry.id,
+                impact_score=score,
+                feedback_text=feedback
+            )
+            db.session.add(evaluation)
+            
+            # Update session status if game over
+            if session_id:
+                session = db.session.get(InterviewSession, session_id)
+                if session:
+                    # Check if this was the last question
+                    is_last_question = question_number >= total_questions
+                    
+                    if is_practice_mode:
+                      if is_last_question:
+                          session.status = 'completed_won'
+                          session.ended_at = datetime.utcnow()
+                    else:
+                      if updated_boss_health <= 0:
+                          session.status = 'completed_won'
+                          session.ended_at = datetime.utcnow()
+                      elif updated_player_health <= 0:
+                          session.status = 'completed_lost'
+                          session.ended_at = datetime.utcnow()
+                      elif is_last_question:
                         if updated_boss_health < updated_player_health:
                             session.status = 'completed_won'
                         else:
                             session.status = 'completed_lost'
                         session.ended_at = datetime.utcnow()
-
-        db.session.commit()
+            
+            db.session.commit()
+        except Exception as e:
+            db.session.rollback()
+            app.logger.error(f"Database error saving answer: {e}")
+            # we can continue and still return the score
 
     return jsonify({
         "damage": damage,
