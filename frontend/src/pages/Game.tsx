@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import axios from 'axios';
 import { API_BASE_URL } from '../config';
@@ -48,11 +48,14 @@ function Game() {
   const role = searchParams.get('role') || 'software_engineer';
   const difficulty = (searchParams.get('difficulty') || 'Medium');
   const interviewType = (searchParams.get('interviewType') || 'role');
+  const mode = (searchParams.get('mode') || 'classic') as 'classic' | 'practice';
+  const isPracticeMode = mode === 'practice';
   const [jobDescription, setJobDescription] = useState('');
   const { token } = useAuth();
   const [sessionId, setSessionId] = useState<number | null>(null);
   const [currentQuestionId, setCurrentQuestionId] = useState<number | null>(null);
   const [hydrated, setHydrated] = useState(false);
+  const initializationStarted = useRef(false);
 
   const [gameState, setGameState] = useState<GameState>({
     bossHealth: 100,
@@ -70,6 +73,7 @@ function Game() {
   const isShowingFeedback = Boolean(gameState.feedback);
 
   const [gameplaySettings, setGameplaySettings] = useState<GameplaySettings>(() => loadGameplaySettings());
+  const shouldAutoAdvance = isPracticeMode ? false : gameplaySettings.autoAdvance;
   const [nextAction, setNextAction] = useState<NextAction | null>(null);
 
   useEffect(() => {
@@ -111,6 +115,9 @@ function Game() {
       }
     }
 
+    if (initializationStarted.current) return;
+    initializationStarted.current = true;
+
     let draftJobDescription = '';
     setHydrated(true);
     if (interviewType === 'job_description') {
@@ -144,11 +151,12 @@ function Game() {
     setNextAction(null);
 
     if (action.kind === 'results') {
-      navigate(`/results?won=${action.won}&role=${role}`);
+      navigate(`/results?won=${action.won}&role=${role}&mode=${mode}&sessionId=${sessionId ?? ''}`);
       localStorage.removeItem(GAME_STATE_KEY);
       return;
     }
 
+    setAnswer('');
     loadNextQuestion(undefined, action.nextQuestionNumber);
   };
 
@@ -168,6 +176,7 @@ function Game() {
         {
           role,
           difficulty,
+          mode,
           interviewType,
           jobDescription: interviewType === 'job_description' ? effectiveJobDescription : ''
         },
@@ -200,6 +209,7 @@ function Game() {
       const response = await axios.post(`${API_BASE_URL}/api/game/question`, {
         role,
         difficulty,
+        mode,
         interviewType,
         jobDescription: interviewType === 'job_description' ? jobDescription : '',
         questionNumber: questionNumber0,
@@ -227,6 +237,11 @@ function Game() {
   const submitAnswer = async () => {
     if (!answer.trim()) return;
 
+    if (!currentQuestionId) {
+      setError('Question is still loading. Please wait a moment and try again.');
+      return;
+    }
+
     setNextAction(null);
     setIsLoading(true);
     setError('');
@@ -241,6 +256,7 @@ function Game() {
         role,
         difficulty,
         interviewType,
+        mode,
         jobDescription: interviewType === 'job_description' ? jobDescription : '',
         sessionId,
         questionId: currentQuestionId,
@@ -258,10 +274,16 @@ function Game() {
         feedback: response.data.feedback
       }));
 
-      setAnswer('');
-
       const computed: NextAction = (() => {
         const nextQuestionNumber = gameState.currentQuestion + 1;
+
+        if (isPracticeMode) {
+          if (nextQuestionNumber <= gameState.totalQuestions) {
+            return { kind: 'next', nextQuestionNumber };
+          }
+
+          return { kind: 'results', won: true };
+        }
 
         if (newBossHealth <= 0) return { kind: 'results', won: true };
         if (newPlayerHealth <= 0) return { kind: 'results', won: false };
@@ -273,7 +295,7 @@ function Game() {
         return { kind: 'results', won: newBossHealth < newPlayerHealth };
       })();
 
-      if (gameplaySettings.autoAdvance) {
+      if (shouldAutoAdvance) {
         setTimeout(() => performNextAction(computed), 2000);
       } else {
         setNextAction(computed);
@@ -300,34 +322,43 @@ function Game() {
   return (
     <div className="min-h-screen bg-gradient-to-b from-purple-900 via-purple-800 to-indigo-900 p-4 pt-20">
       <div className="max-w-4xl mx-auto">
-        {/* Health Bars */}
-        <div className="mb-8 space-y-4">
-          <div>
-            <div className="flex justify-between mb-2">
-              <span className="text-white font-bold">Boss (Recruiter)</span>
-              <span className="text-white">{gameState.bossHealth}%</span>
+        {!isPracticeMode ? (
+          /* Health Bars */
+          <div className="mb-8 space-y-4">
+            <div>
+              <div className="flex justify-between mb-2">
+                <span className="text-white font-bold">Boss (Recruiter)</span>
+                <span className="text-white">{gameState.bossHealth}%</span>
+              </div>
+              <div className="w-full bg-gray-700 rounded-full h-6">
+                <div
+                  className={`${getHealthBarColor(gameState.bossHealth)} h-6 rounded-full transition-all duration-500`}
+                  style={{ width: `${gameState.bossHealth}%` }}
+                />
+              </div>
             </div>
-            <div className="w-full bg-gray-700 rounded-full h-6">
-              <div
-                className={`${getHealthBarColor(gameState.bossHealth)} h-6 rounded-full transition-all duration-500`}
-                style={{ width: `${gameState.bossHealth}%` }}
-              />
-            </div>
-          </div>
 
-          <div>
-            <div className="flex justify-between mb-2">
-              <span className="text-white font-bold">You (Candidate)</span>
-              <span className="text-white">{gameState.playerHealth}%</span>
-            </div>
-            <div className="w-full bg-gray-700 rounded-full h-6">
-              <div
-                className={`${getHealthBarColor(gameState.playerHealth)} h-6 rounded-full transition-all duration-500`}
-                style={{ width: `${gameState.playerHealth}%` }}
-              />
+            <div>
+              <div className="flex justify-between mb-2">
+                <span className="text-white font-bold">You (Candidate)</span>
+                <span className="text-white">{gameState.playerHealth}%</span>
+              </div>
+              <div className="w-full bg-gray-700 rounded-full h-6">
+                <div
+                  className={`${getHealthBarColor(gameState.playerHealth)} h-6 rounded-full transition-all duration-500`}
+                  style={{ width: `${gameState.playerHealth}%` }}
+                />
+              </div>
             </div>
           </div>
-        </div>
+        ) : (
+          <div className="mb-8 rounded-lg border border-cyan-500 bg-cyan-900 bg-opacity-30 p-4 text-center">
+            <div className="text-cyan-200 font-bold text-lg">Practice Mode</div>
+            <div className="text-cyan-100 text-sm mt-1">
+              Focus on feedback and improving each response before moving on.
+            </div>
+          </div>
+        )}
 
         {/* Question Card */}
         <div className="bg-purple-800 bg-opacity-50 rounded-lg p-8 backdrop-blur-sm border border-purple-600 mb-6">
@@ -371,7 +402,7 @@ function Game() {
             </div>
           )}
 
-          <div className={isShowingFeedback ? 'opacity-60 pointer-events-none' : ''}>
+          <div>
           <MicDictation value={answer} onChange={setAnswer} disabled={isLoading || isShowingFeedback} />
 
           <textarea
@@ -383,31 +414,33 @@ function Game() {
           />
         </div>
 
-        <button
-          onClick={submitAnswer}
-          disabled={
-            isLoading ||
-            isShowingFeedback ||
-            !answer.trim() ||
-            (!!nextAction && !gameplaySettings.autoAdvance)
-          }
-          className={[
-            "w-full text-white font-bold py-3 px-6 rounded-lg transition-all duration-200",
-            (isLoading || isShowingFeedback || !answer.trim() || (!!nextAction && !gameplaySettings.autoAdvance))
-              ? "bg-gray-600 cursor-not-allowed"
-              : "bg-purple-600 hover:bg-purple-700 transform hover:scale-105"
-          ].join(" ")}
-        >
-          {isLoading ? 'Submitting...' : 'Submit Answer'}
-        </button>
+        {!isShowingFeedback && (
+          <button
+            onClick={submitAnswer}
+            disabled={
+              isLoading ||
+              !currentQuestionId ||
+              !answer.trim() ||
+              (!!nextAction && !shouldAutoAdvance)
+            }
+            className={[
+              "w-full text-white font-bold py-3 px-6 rounded-lg transition-all duration-200",
+              (isLoading || !currentQuestionId || !answer.trim() || (!!nextAction && !shouldAutoAdvance))
+                ? "bg-gray-600 cursor-not-allowed"
+                : "bg-purple-600 hover:bg-purple-700 transform hover:scale-105"
+            ].join(" ")}
+          >
+            {isLoading ? 'Submitting...' : isPracticeMode ? 'Get Feedback' : 'Submit Answer'}
+          </button>
+        )}
 
         {isShowingFeedback && (
           <div className="mt-3 text-xs text-purple-300">
-            Review feedback, then continue.
+            Review your response and feedback, then continue.
           </div>
         )}
 
-          {!gameplaySettings.autoAdvance && nextAction && (
+          {!shouldAutoAdvance && nextAction && (
             <button
               onClick={() => performNextAction(nextAction)}
               className="w-full mt-3 bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-6 rounded-lg transition-all duration-200"
@@ -425,7 +458,7 @@ function Game() {
             }}
             className="text-purple-300 hover:text-white underline"
           >
-            Quit Game
+            {isPracticeMode ? 'End Practice' : 'Quit Game'}
           </button>
         </div>
       </div>
