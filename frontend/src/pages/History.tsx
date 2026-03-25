@@ -22,6 +22,7 @@ type SessionHistory = {
   status: string;
   startedAt: string | null;
   endedAt: string | null;
+  mode: string;
   questions: QuestionHistory[];
 };
 
@@ -126,7 +127,7 @@ function History() {
                 <div>
                   <div className="text-lg text-white">{formatRole(session.role)}</div>
                   <div className="text-xs text-purple-200">
-                    Difficulty: {session.difficulty} · Status: {session.status}
+                    Difficulty: {session.difficulty}{session.mode === 'practice' ? ' (Practice)' : ''} · Status: {session.status}
                   </div>
                 </div>
                 <div className="text-xs text-purple-300">

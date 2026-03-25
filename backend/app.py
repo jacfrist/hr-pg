@@ -333,6 +333,7 @@ def start_game():
     data = request.json
     role = data.get('role', 'software_engineer')
     requested_difficulty = data.get('difficulty')
+    mode = data.get('mode', 'classic')
     
     user_id = get_jwt_identity()
     
@@ -343,6 +344,7 @@ def start_game():
         user_id=int(user_id) if user_id else None,
         role=role,
         difficulty=difficulty,
+        mode=mode,
         status='in_progress'
     )
     
@@ -640,6 +642,7 @@ def get_history():
             "sessionId": session.id,
             "role": session.role,
             "difficulty": session.difficulty,
+            "mode": session.mode,
             "status": session.status,
             "startedAt": session.started_at.isoformat() if session.started_at else None,
             "endedAt": session.ended_at.isoformat() if session.ended_at else None,

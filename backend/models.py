@@ -23,6 +23,7 @@ class InterviewSession(db.Model):
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
     role = db.Column(db.String(50), nullable=False)
     difficulty = db.Column(db.String(20), nullable=False)
+    mode = db.Column(db.String(20), default='classic')
     status = db.Column(db.String(20), default='in_progress')  # in_progress, completed, abandoned
     started_at = db.Column(db.DateTime, default=datetime.utcnow)
     ended_at = db.Column(db.DateTime, nullable=True)
