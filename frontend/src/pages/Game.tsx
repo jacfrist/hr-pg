@@ -5,6 +5,22 @@ import { API_BASE_URL } from '../config';
 import { useAuth } from '../context/AuthContext';
 import MicDictation from '../components/asr/MicDictation';
 
+import sweBoss from '../assets/swe-boss.png';
+import sweBossMove from '../assets/swe-boss-move.png';
+import sweBossDmg from '../assets/swe-boss-dmg.png';
+import dataBoss from '../assets/data-boss.png';
+import dataBossMove from '../assets/data-boss-move.png';
+import dataBossDmg from '../assets/data-boss-dmg.png';
+import pmBoss from '../assets/pm-boss.png';
+import pmBossMove from '../assets/pm-boss-move.png';
+import pmBossDmg from '../assets/pm-boss-dmg.png';
+
+const BOSS_SPRITES: Record<string, { idle: string; move: string; dmg: string }> = {
+  software_engineer: { idle: sweBoss, move: sweBossMove, dmg: sweBossDmg },
+  data_scientist: { idle: dataBoss, move: dataBossMove, dmg: dataBossDmg },
+  product_manager: { idle: pmBoss, move: pmBossMove, dmg: pmBossDmg },
+};
+
 interface GameState {
   bossHealth: number;
   playerHealth: number;
@@ -69,6 +85,39 @@ function Game() {
   const [answer, setAnswer] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
+
+  // Boss sprite animation state
+  const [idleFrame, setIdleFrame] = useState(0);
+  const [showDmg, setShowDmg] = useState(false);
+  const prevBossHealth = useRef(gameState.bossHealth);
+
+  const sprites = BOSS_SPRITES[role] || BOSS_SPRITES.software_engineer;
+
+  // Idle animation: alternate between idle and move every 500ms
+  useEffect(() => {
+    if (showDmg) return;
+    const timer = setInterval(() => {
+      setIdleFrame(f => (f === 0 ? 1 : 0));
+    }, 500);
+    return () => clearInterval(timer);
+  }, [showDmg]);
+
+  // Damage animation: trigger when boss health decreases
+  useEffect(() => {
+    if (gameState.bossHealth < prevBossHealth.current) {
+      setShowDmg(true);
+      const timer = setTimeout(() => setShowDmg(false), 1000);
+      prevBossHealth.current = gameState.bossHealth;
+      return () => clearTimeout(timer);
+    }
+    prevBossHealth.current = gameState.bossHealth;
+  }, [gameState.bossHealth]);
+
+  const currentSprite = showDmg
+    ? sprites.dmg
+    : idleFrame === 0
+      ? sprites.idle
+      : sprites.move;
 
   const isShowingFeedback = Boolean(gameState.feedback);
 
@@ -322,59 +371,65 @@ function Game() {
   return (
     <div className="min-h-screen bg-gradient-to-b from-purple-900 via-purple-800 to-indigo-900 p-4 pt-20">
       <div className="max-w-4xl mx-auto">
+
+        {/* Top meta row */}
+        <div className="flex items-center justify-between mb-3 text-sm text-purple-300">
+          <span>Question <span className="text-white font-semibold">{gameState.currentQuestion}</span> of {gameState.totalQuestions}</span>
+          <span>Difficulty: <span className="text-white font-semibold">{difficulty}</span></span>
+          <span>
+            {interviewType === 'job_description' ? 'Job Description-Based' : 'Role-Based'}
+          </span>
+        </div>
+
         {!isPracticeMode ? (
-          /* Health Bars */
-          <div className="mb-8 space-y-4">
+          /* Health Bars — compact */
+          <div className="space-y-2">
             <div>
-              <div className="flex justify-between mb-2">
-                <span className="text-white font-bold">Boss (Recruiter)</span>
-                <span className="text-white">{gameState.bossHealth}%</span>
+              <div className="flex justify-between mb-1">
+                <span className="text-white text-xs font-semibold">Boss (Recruiter)</span>
+                <span className="text-white text-xs">{gameState.bossHealth}%</span>
               </div>
-              <div className="w-full bg-gray-700 rounded-full h-6">
+              <div className="w-full bg-gray-700 rounded-full h-3">
                 <div
-                  className={`${getHealthBarColor(gameState.bossHealth)} h-6 rounded-full transition-all duration-500`}
+                  className={`${getHealthBarColor(gameState.bossHealth)} h-3 rounded-full transition-all duration-500`}
                   style={{ width: `${gameState.bossHealth}%` }}
                 />
               </div>
             </div>
 
             <div>
-              <div className="flex justify-between mb-2">
-                <span className="text-white font-bold">You (Candidate)</span>
-                <span className="text-white">{gameState.playerHealth}%</span>
+              <div className="flex justify-between mb-1">
+                <span className="text-white text-xs font-semibold">You (Candidate)</span>
+                <span className="text-white text-xs">{gameState.playerHealth}%</span>
               </div>
-              <div className="w-full bg-gray-700 rounded-full h-6">
+              <div className="w-full bg-gray-700 rounded-full h-3">
                 <div
-                  className={`${getHealthBarColor(gameState.playerHealth)} h-6 rounded-full transition-all duration-500`}
+                  className={`${getHealthBarColor(gameState.playerHealth)} h-3 rounded-full transition-all duration-500`}
                   style={{ width: `${gameState.playerHealth}%` }}
                 />
               </div>
             </div>
           </div>
         ) : (
-          <div className="mb-8 rounded-lg border border-cyan-500 bg-cyan-900 bg-opacity-30 p-4 text-center">
-            <div className="text-cyan-200 font-bold text-lg">Practice Mode</div>
-            <div className="text-cyan-100 text-sm mt-1">
-              Focus on feedback and improving each response before moving on.
-            </div>
+          <div className="rounded-lg border border-cyan-500 bg-cyan-900 bg-opacity-30 px-4 py-2 flex items-center gap-3">
+            <span className="text-cyan-200 font-bold text-sm">Practice Mode</span>
+            <span className="text-cyan-100 text-xs">Focus on feedback and improving each response.</span>
           </div>
         )}
 
+        {/* Boss Sprite */}
+        <div className="flex justify-center">
+          <img
+            src={currentSprite}
+            alt="Boss"
+            className="w-48 h-48 object-contain drop-shadow-lg"
+            style={{ imageRendering: 'pixelated' }}
+          />
+        </div>
+
         {/* Question Card */}
-        <div className="bg-purple-800 bg-opacity-50 rounded-lg p-8 backdrop-blur-sm border border-purple-600 mb-6">
-          <div className="text-purple-300 text-sm mb-2">
-            Question {gameState.currentQuestion} of {gameState.totalQuestions}
-          </div>
-          <div className="text-purple-300 text-sm mb-4">
-            Difficulty: <span className="text-white font-semibold">{difficulty}</span>
-          </div>
-          <div className="text-purple-300 text-sm mb-4">
-            Interview type:{' '}
-            <span className="text-white font-semibold">
-              {interviewType === 'job_description' ? 'Job Description-Based' : 'Role-Based'}
-            </span>
-          </div>
-          <h2 className="text-2xl text-white font-bold mb-4">
+        <div className="bg-purple-800 bg-opacity-50 rounded-lg p-6 backdrop-blur-sm border border-purple-600 mb-6">
+          <h2 className="text-xl text-white font-bold mb-4">
             {gameState.question || 'Loading question...'}
           </h2>
 
