@@ -4,6 +4,7 @@ import axios from 'axios';
 import { API_BASE_URL } from '../config';
 import { useAuth } from '../context/AuthContext';
 import MicDictation from '../components/asr/MicDictation';
+import { playPlayerAttack, playBossAttack } from '../audio/sfx';
 
 interface GameState {
   bossHealth: number;
@@ -273,6 +274,9 @@ function Game() {
         playerHealth: newPlayerHealth,
         feedback: response.data.feedback
       }));
+
+      if (newBossHealth < gameState.bossHealth) playPlayerAttack();
+      if (newPlayerHealth < gameState.playerHealth) playBossAttack();
 
       const computed: NextAction = (() => {
         const nextQuestionNumber = gameState.currentQuestion + 1;
