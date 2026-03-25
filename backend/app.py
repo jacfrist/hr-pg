@@ -378,7 +378,7 @@ def get_question():
 
     # If a session exists, trust the session's difficulty (so refresh/reload stays consistent)
     if session_id:
-        session = InterviewSession.query.get(session_id)
+        session = db.session.get(InterviewSession, session_id)
         if session and session.difficulty:
             difficulty = normalize_difficulty(session.difficulty, fallback=difficulty)
 
@@ -440,7 +440,7 @@ def submit_answer():
     difficulty = normalize_difficulty(requested_difficulty, fallback=role_info["difficulty"])
 
     if session_id:
-        session = InterviewSession.query.get(session_id)
+        session = db.session.get(InterviewSession, session_id)
         if session and session.difficulty:
             difficulty = normalize_difficulty(session.difficulty, fallback=difficulty)
 
@@ -485,7 +485,7 @@ def submit_answer():
     
     # Security/consistency: Ensure provided question_id actually belongs to the provided session_id
     if question_id and session_id:
-        q = Question.query.get(question_id)
+        q = db.session.get(Question, question_id)
         if q and q.session_id != session_id:
             # Mismatch due to client race condition; force recovery
             question_id = None
@@ -520,7 +520,7 @@ def submit_answer():
         db.session.add(evaluation)
 
         if session_id:
-            session = InterviewSession.query.get(session_id)
+            session = db.session.get(InterviewSession, session_id)
             if session:
                 is_last_question = question_number >= total_questions
 
@@ -554,7 +554,7 @@ def submit_answer():
 @app.route('/api/game/results/<int:session_id>', methods=['GET'])
 @jwt_required(optional=True)
 def get_game_results(session_id):
-    session = InterviewSession.query.get(session_id)
+    session = db.session.get(InterviewSession, session_id)
 
     if not session:
         return jsonify({"message": "Session not found"}), 404
