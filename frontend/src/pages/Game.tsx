@@ -1,9 +1,25 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import axios from 'axios';
 import { API_BASE_URL } from '../config';
 import { useAuth } from '../context/AuthContext';
 import MicDictation from '../components/asr/MicDictation';
+
+import sweBoss from '../assets/swe-boss.png';
+import sweBossMove from '../assets/swe-boss-move.png';
+import sweBossDmg from '../assets/swe-boss-dmg.png';
+import dataBoss from '../assets/data-boss.png';
+import dataBossMove from '../assets/data-boss-move.png';
+import dataBossDmg from '../assets/data-boss-dmg.png';
+import pmBoss from '../assets/pm-boss.png';
+import pmBossMove from '../assets/pm-boss-move.png';
+import pmBossDmg from '../assets/pm-boss-dmg.png';
+
+const BOSS_SPRITES: Record<string, { idle: string; move: string; dmg: string }> = {
+  software_engineer: { idle: sweBoss, move: sweBossMove, dmg: sweBossDmg },
+  data_scientist: { idle: dataBoss, move: dataBossMove, dmg: dataBossDmg },
+  product_manager: { idle: pmBoss, move: pmBossMove, dmg: pmBossDmg },
+};
 
 interface GameState {
   bossHealth: number;
@@ -66,6 +82,39 @@ function Game() {
   const [answer, setAnswer] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
+
+  // Boss sprite animation state
+  const [idleFrame, setIdleFrame] = useState(0);
+  const [showDmg, setShowDmg] = useState(false);
+  const prevBossHealth = useRef(gameState.bossHealth);
+
+  const sprites = BOSS_SPRITES[role] || BOSS_SPRITES.software_engineer;
+
+  // Idle animation: alternate between idle and move every 500ms
+  useEffect(() => {
+    if (showDmg) return;
+    const timer = setInterval(() => {
+      setIdleFrame(f => (f === 0 ? 1 : 0));
+    }, 500);
+    return () => clearInterval(timer);
+  }, [showDmg]);
+
+  // Damage animation: trigger when boss health decreases
+  useEffect(() => {
+    if (gameState.bossHealth < prevBossHealth.current) {
+      setShowDmg(true);
+      const timer = setTimeout(() => setShowDmg(false), 1000);
+      prevBossHealth.current = gameState.bossHealth;
+      return () => clearTimeout(timer);
+    }
+    prevBossHealth.current = gameState.bossHealth;
+  }, [gameState.bossHealth]);
+
+  const currentSprite = showDmg
+    ? sprites.dmg
+    : idleFrame === 0
+      ? sprites.idle
+      : sprites.move;
 
   const isShowingFeedback = Boolean(gameState.feedback);
 
@@ -298,7 +347,15 @@ function Game() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-purple-900 via-purple-800 to-indigo-900 p-4 pt-20">
+    <div className="min-h-screen bg-gradient-to-b from-purple-900 via-purple-800 to-indigo-900 p-4 pt-20 relative">
+      {/* Boss Sprite */}
+      <img
+        src={currentSprite}
+        alt="Boss"
+        className="absolute top-20 right-4 w-32 h-32 object-contain drop-shadow-lg"
+        style={{ imageRendering: 'pixelated' }}
+      />
+
       <div className="max-w-4xl mx-auto">
         {/* Health Bars */}
         <div className="mb-8 space-y-4">
