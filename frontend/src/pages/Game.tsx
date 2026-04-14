@@ -15,6 +15,9 @@ import dataBossDmg from '../assets/data-boss-dmg.png';
 import pmBoss from '../assets/pm-boss.png';
 import pmBossMove from '../assets/pm-boss-move.png';
 import pmBossDmg from '../assets/pm-boss-dmg.png';
+import player from '../assets/player.png';
+import playerMove from '../assets/player-move.png';
+import background from '../assets/background.png';
 
 const BOSS_SPRITES: Record<string, { idle: string; move: string; dmg: string }> = {
   software_engineer: { idle: sweBoss, move: sweBossMove, dmg: sweBossDmg },
@@ -138,6 +141,9 @@ function Game() {
   const [showDmg, setShowDmg] = useState(false);
   const prevBossHealth = useRef(gameState.bossHealth);
 
+  // Player sprite animation state
+  const [playerFrame, setPlayerFrame] = useState(0);
+
   const sprites = BOSS_SPRITES[role] || BOSS_SPRITES.software_engineer;
 
   // Idle animation: alternate between idle and move every 500ms
@@ -148,6 +154,14 @@ function Game() {
     }, 500);
     return () => clearInterval(timer);
   }, [showDmg]);
+
+  // Player animation: alternate between player and player-move every 500ms
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setPlayerFrame(f => (f === 0 ? 1 : 0));
+    }, 500);
+    return () => clearInterval(timer);
+  }, []);
 
   // Damage animation: trigger when boss health decreases
   useEffect(() => {
@@ -166,14 +180,20 @@ function Game() {
       ? sprites.idle
       : sprites.move;
 
+  const currentPlayerSprite = playerFrame === 0 ? player : playerMove;
+
   const isShowingFeedback = Boolean(gameState.feedback);
 
   const [gameplaySettings, setGameplaySettings] = useState<GameplaySettings>(() => loadGameplaySettings());
   const shouldAutoAdvance = isPracticeMode ? false : gameplaySettings.autoAdvance;
   const [nextAction, setNextAction] = useState<NextAction | null>(null);
 
-  const [stopwatchEnabled, setStopwatchEnabled] = useState(() => loadStopwatchPrefs().enabled);
-  const [nudgeTemperature, setNudgeTemperature] = useState(() => loadStopwatchPrefs().temperature);
+  // Read stopwatch settings from URL params (passed from LevelSelect)
+  const stopwatchFromUrl = searchParams.get('stopwatch') === 'true';
+  const nudgeTempFromUrl = Number(searchParams.get('nudgeTemp')) || 35;
+
+  const [stopwatchEnabled, setStopwatchEnabled] = useState(() => stopwatchFromUrl);
+  const [nudgeTemperature, setNudgeTemperature] = useState(() => nudgeTempFromUrl);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [latestNudge, setLatestNudge] = useState<string | null>(null);
   const [nudgeLoading, setNudgeLoading] = useState(false);
@@ -542,11 +562,11 @@ function Game() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-purple-900 via-purple-800 to-indigo-900 p-4 pt-20">
+    <div className="min-h-screen p-4 pt-20">
       <div className="max-w-4xl mx-auto">
 
         {/* Top meta row */}
-        <div className="flex items-center justify-between mb-3 text-sm text-purple-300">
+        <div className="flex items-center justify-between mb-3 text-sm text-cyan-300">
           <span>Question <span className="text-white font-semibold">{gameState.currentQuestion}</span> of {gameState.totalQuestions}</span>
           <span>Difficulty: <span className="text-white font-semibold">{difficulty}</span></span>
           <span>
@@ -554,165 +574,155 @@ function Game() {
           </span>
         </div>
 
-        {!isPracticeMode ? (
-          /* Health Bars — compact */
-          <div className="space-y-2">
-            <div>
-              <div className="flex justify-between mb-1">
-                <span className="text-white text-xs font-semibold">Boss (Recruiter)</span>
-                <span className="text-white text-xs">{gameState.bossHealth}%</span>
-              </div>
-              <div className="w-full bg-gray-700 rounded-full h-3">
-                <div
-                  className={`${getHealthBarColor(gameState.bossHealth)} h-3 rounded-full transition-all duration-500`}
-                  style={{ width: `${gameState.bossHealth}%` }}
-                />
-              </div>
-            </div>
-
-            <div>
-              <div className="flex justify-between mb-1">
-                <span className="text-white text-xs font-semibold">You (Candidate)</span>
-                <span className="text-white text-xs">{gameState.playerHealth}%</span>
-              </div>
-              <div className="w-full bg-gray-700 rounded-full h-3">
-                <div
-                  className={`${getHealthBarColor(gameState.playerHealth)} h-3 rounded-full transition-all duration-500`}
-                  style={{ width: `${gameState.playerHealth}%` }}
-                />
-              </div>
-            </div>
+        {/* Game Scene Window - Pokemon Battle Style */}
+        <div
+          className="relative w-full h-96 mb-6 rounded-lg overflow-hidden border-2 shadow-2xl"
+          style={{
+            backgroundImage: `url(${background})`,
+            backgroundSize: 'cover',
+            backgroundPosition: 'center',
+            imageRendering: 'pixelated',
+            borderColor: 'var(--retro-border)'
+          }}
+        >
+          {/* Player Sprite - Bottom Left (Foreground) */}
+          <div className="absolute bottom-0 left-0 w-64 h-64 overflow-hidden">
+            <img
+              src={currentPlayerSprite}
+              alt="Player"
+              className="w-full h-full object-cover object-top-left"
+              style={{ imageRendering: 'pixelated' }}
+            />
           </div>
-        ) : (
-          <div className="rounded-lg border border-cyan-500 bg-cyan-900 bg-opacity-30 px-4 py-2 flex items-center gap-3">
-            <span className="text-cyan-200 font-bold text-sm">Practice Mode</span>
-            <span className="text-cyan-100 text-xs">Focus on feedback and improving each response.</span>
-          </div>
-        )}
 
-        {/* Boss Sprite and Stopwatch/Nudge Controls */}
-        <div className="mb-6 rounded-lg border border-purple-500/70 bg-purple-900/35 p-4 backdrop-blur-sm">
-          <div className="flex flex-col gap-6 md:flex-row">
-            {/* Boss sprite */}
-            <div className="flex justify-center items-center md:pr-8">
-              <img
-                src={currentSprite}
-                alt="Boss"
-                className="w-48 h-48 object-contain drop-shadow-lg"
-                style={{ imageRendering: 'pixelated' }}
-              />
-            </div>
-            {/* Stopwatch/Nudge controls */}
-            <div className="flex-1 flex flex-col gap-3 sm:gap-5">
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                <div className="flex items-start gap-3 min-w-0">
-                  <button
-                    type="button"
-                    role="switch"
-                    aria-checked={stopwatchEnabled}
-                    onClick={() => setStopwatchEnabled((v) => !v)}
-                    className={[
-                      'relative mt-0.5 h-7 w-12 shrink-0 rounded-full transition-colors duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-purple-300 focus-visible:ring-offset-2 focus-visible:ring-offset-purple-950',
-                      stopwatchEnabled ? 'bg-emerald-600' : 'bg-gray-600',
-                    ].join(' ')}
-                  >
-                    <span
-                      className={[
-                        'absolute top-0.5 left-0.5 h-6 w-6 rounded-full bg-white shadow transition-transform duration-200',
-                        stopwatchEnabled ? 'translate-x-5' : 'translate-x-0',
-                      ].join(' ')}
-                    />
-                  </button>
-                  <div className="min-w-0">
-                    <div className="text-white font-semibold text-sm">Interview stopwatch</div>
-                    <p className="text-purple-300 text-xs mt-1 leading-relaxed">
-                      {stopwatchEnabled
-                        ? 'Time counts only while you are drafting an answer (paused during feedback). The clock resets for each new question and whenever you turn this off and on.'
-                        : `Simulate pacing: optional AI interviewer lines every ${NUDGE_INTERVAL_SECONDS} seconds, tuned from supportive to high-pressure.`}
-                    </p>
-                  </div>
+          {/* Player Health Bar - Above Player */}
+          {!isPracticeMode && (
+            <div className="absolute bottom-64 left-16 w-48">
+              <div className="bg-white bg-opacity-90 rounded-lg p-2 shadow-lg border-2 border-gray-800">
+                <div className="flex justify-between mb-1">
+                  <span className="text-gray-800 text-xs font-bold">You</span>
+                  <span className="text-gray-800 text-xs font-bold">{gameState.playerHealth}%</span>
                 </div>
-                {stopwatchEnabled && (
+                <div className="w-full bg-gray-400 rounded-full h-2 border border-gray-600">
                   <div
-                    className="font-mono text-2xl sm:text-3xl text-white tabular-nums tracking-wider text-right sm:pt-0.5"
-                    aria-live="polite"
-                  >
-                    {formatStopwatchTime(elapsedSeconds)}
-                  </div>
+                    className={`${getHealthBarColor(gameState.playerHealth)} h-2 rounded-full transition-all duration-500`}
+                    style={{ width: `${gameState.playerHealth}%` }}
+                  />
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Stopwatch Timer - Top Right Corner */}
+          {stopwatchEnabled && (
+            <div className="absolute top-4 right-4">
+              <div
+                className="font-mono text-3xl text-white tabular-nums tracking-wider drop-shadow-lg"
+                style={{ textShadow: '2px 2px 4px rgba(0,0,0,0.8)' }}
+                aria-live="polite"
+              >
+                {formatStopwatchTime(elapsedSeconds)}
+              </div>
+            </div>
+          )}
+
+          {/* Boss Sprite - Top Right */}
+          <div className="absolute top-16 right-12">
+            <img
+              src={currentSprite}
+              alt="Boss"
+              className="w-64 h-64 object-contain drop-shadow-lg"
+              style={{
+                imageRendering: 'pixelated',
+                transform: role === 'software_engineer' ? 'scale(0.8)' : 'scale(1)',
+                filter: role === 'software_engineer' ? 'brightness(1.2) contrast(1.1)' : 'none'
+              }}
+            />
+          </div>
+
+          {/* Boss Speech Bubble - Interviewer Prompts */}
+          {stopwatchEnabled && (nudgeLoading || (latestNudge && !isShowingFeedback)) && (
+            <div className="absolute top-48 right-64 w-64">
+              {/* Speech bubble tail */}
+              <div
+                className="absolute top-4 -right-3 w-0 h-0"
+                style={{
+                  borderTop: '10px solid transparent',
+                  borderBottom: '10px solid transparent',
+                  borderLeft: '14px solid rgba(255, 255, 255, 0.95)',
+                  filter: 'drop-shadow(2px 0px 2px rgba(0,0,0,0.2))'
+                }}
+              />
+              {/* Speech bubble content */}
+              <div
+                className={[
+                  'rounded-lg px-4 py-3 text-[10px] leading-snug shadow-xl',
+                  nudgeTemperature >= 67
+                    ? 'border-2 border-amber-500 bg-amber-50/95 text-amber-900'
+                    : nudgeTemperature <= 33
+                      ? 'border-2 border-cyan-500 bg-cyan-50/95 text-cyan-900'
+                      : 'border-2 border-purple-400 bg-white/95 text-gray-800',
+                ].join(' ')}
+              >
+                {nudgeLoading ? (
+                  <span className="italic opacity-75">...</span>
+                ) : (
+                  <span>{latestNudge}</span>
                 )}
               </div>
-              {stopwatchEnabled && (
-                <div className="mt-4 pt-4 border-t border-purple-600/50">
-                  <div className="flex justify-between gap-2 text-xs text-purple-200 mb-2">
-                    <span className="text-cyan-200/95">Supportive</span>
-                    <span className="text-purple-300/90 hidden sm:inline">Nudge intensity</span>
-                    <span className="text-amber-200/95">High pressure</span>
-                  </div>
-                  <input
-                    type="range"
-                    min={0}
-                    max={100}
-                    value={nudgeTemperature}
-                    onChange={(e) => setNudgeTemperature(Number(e.target.value))}
-                    className="w-full h-2 rounded-full appearance-none cursor-pointer bg-purple-950 accent-fuchsia-500"
-                    style={{
-                      background: `linear-gradient(to right, rgb(34 211 238 / 0.35) 0%, rgb(168 85 247 / 0.35) 50%, rgb(245 158 11 / 0.35) 100%)`,
-                    }}
-                    aria-valuemin={0}
-                    aria-valuemax={100}
-                    aria-valuenow={nudgeTemperature}
-                    aria-label="Interviewer nudge intensity from supportive to high pressure"
-                  />
-                  <p className="text-xs text-purple-300/85 mt-3 leading-relaxed">
-                    While the stopwatch runs, an AI-generated interviewer line appears every {NUDGE_INTERVAL_SECONDS}{' '}
-                    seconds. The slider shapes how warm or demanding that voice sounds.
-                  </p>
-                  {(nudgeLoading || (latestNudge && !isShowingFeedback)) && (
-                    <div
-                      className={[
-                        'mt-3 rounded-md border px-3 py-2.5 text-sm leading-snug',
-                        nudgeTemperature >= 67
-                          ? 'border-amber-500/70 bg-amber-950/35 text-amber-50'
-                          : nudgeTemperature <= 33
-                            ? 'border-cyan-500/60 bg-cyan-950/25 text-cyan-50'
-                            : 'border-purple-400/55 bg-purple-950/40 text-purple-100',
-                      ].join(' ')}
-                    >
-                      {nudgeLoading ? (
-                        <span className="text-purple-200/90 italic">Interviewer is speaking…</span>
-                      ) : (
-                        <span>{latestNudge}</span>
-                      )}
-                    </div>
-                  )}
-                </div>
-              )}
             </div>
-          </div>
+          )}
+
+          {/* Boss Health Bar - Above Boss */}
+          {!isPracticeMode && (
+            <div className="absolute top-8 right-48 w-48">
+              <div className="bg-white bg-opacity-90 rounded-lg p-2 shadow-lg border-2 border-gray-800">
+                <div className="flex justify-between mb-1">
+                  <span className="text-gray-800 text-xs font-bold">Boss</span>
+                  <span className="text-gray-800 text-xs font-bold">{gameState.bossHealth}%</span>
+                </div>
+                <div className="w-full bg-gray-400 rounded-full h-2 border border-gray-600">
+                  <div
+                    className={`${getHealthBarColor(gameState.bossHealth)} h-2 rounded-full transition-all duration-500`}
+                    style={{ width: `${gameState.bossHealth}%` }}
+                  />
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Practice Mode Badge */}
+          {isPracticeMode && (
+            <div className="absolute top-4 left-1/2 transform -translate-x-1/2">
+              <div className="rounded-lg border-2 border-cyan-400 bg-cyan-900 bg-opacity-90 px-4 py-2 shadow-lg">
+                <span className="text-cyan-200 font-bold text-sm">Practice Mode</span>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Question Card */}
-        <div className="bg-purple-800 bg-opacity-50 rounded-lg p-6 backdrop-blur-sm border border-purple-600 mb-6">
-          <h2 className="text-xl text-white font-bold mb-4">
+        <div className="retro-panel mb-6">
+          <h2 className="text-lg tracking-tight text-white font-bold mb-2">
             {gameState.question || 'Loading question...'}
           </h2>
 
           {gameState.feedback && (
-            <div className="mb-4 p-4 bg-purple-900 bg-opacity-50 rounded-lg border border-purple-500">
-              <p className="text-purple-200">{gameState.feedback}</p>
+            <div className="mb-2 p-4 rounded-lg border-2" style={{ borderColor: 'var(--retro-border)', backgroundColor: 'rgba(31, 36, 64, 0.6)' }}>
+              <p className="text-cyan-200">{gameState.feedback}</p>
             </div>
           )}
 
           {error && (
-            <div className="mb-4 p-4 bg-red-900 bg-opacity-50 rounded-lg border border-red-500">
+            <div className="mb-2 p-4 bg-red-900 bg-opacity-50 rounded-lg border border-red-500">
               <p className="text-red-200">{error}</p>
             </div>
           )}
 
           {gameplaySettings.showTooltips && !gameState.feedback && (
-            <div className="mb-4 p-4 bg-purple-900 bg-opacity-40 rounded-lg border border-purple-600">
-              <div className="text-purple-200 text-sm font-semibold mb-2">STAR method quick reminder</div>
-              <ul className="text-purple-200 text-sm list-disc pl-5 space-y-1">
+            <div className="mb-2 p-4 rounded-lg border-2" style={{ borderColor: 'var(--retro-border)', backgroundColor: 'rgba(31, 36, 64, 0.4)' }}>
+              <div className="text-cyan-200 text-sm font-semibold mb-2">STAR method quick reminder</div>
+              <ul className="text-cyan-200 text-sm list-disc pl-5 space-y-1">
                 <li><b>Situation:</b> set the context (1 sentence)</li>
                 <li><b>Task:</b> what you needed to achieve</li>
                 <li><b>Action:</b> what <i>you</i> did (be specific)</li>
@@ -727,7 +737,14 @@ function Game() {
           <textarea
             value={answer}
             onChange={(e) => setAnswer(e.target.value)}
-            className={`w-full ${isShowingFeedback ? 'h-24' : 'h-40'} p-4 bg-purple-900 bg-opacity-50 border border-purple-600 rounded-lg text-white placeholder-purple-400 focus:outline-none focus:border-purple-400 mb-4`}
+            className={`w-full ${isShowingFeedback ? 'h-24' : 'h-40'} p-4 rounded-lg text-white mb-2 placeholder-cyan-400`}
+            style={{
+              backgroundColor: 'var(--retro-panel)',
+              border: '2px solid var(--retro-border)',
+              boxShadow: 'inset 0 0 0 2px var(--retro-border-dark)'
+            }}
+            onFocus={(e) => e.target.style.borderColor = 'var(--retro-accent)'}
+            onBlur={(e) => e.target.style.borderColor = 'var(--retro-border)'}
             placeholder="Type your answer here using the STAR method (Situation, Task, Action, Result)..."
             disabled={isLoading || isShowingFeedback}
           />
@@ -744,17 +761,22 @@ function Game() {
             (!!nextAction && !shouldAutoAdvance)
           }
           className={[
-            "w-full text-white font-bold py-3 px-6 rounded-lg transition-all duration-200",
+            "w-full text-white text-sm font-bold py-2 px-4 rounded-lg transition-all duration-200",
             (isLoading || !currentQuestionId || !gameState.question || !answer.trim() || isShowingFeedback || (!!nextAction && !shouldAutoAdvance))
               ? "bg-gray-600 cursor-not-allowed opacity-50"
-              : "bg-purple-600 hover:bg-purple-700 transform hover:scale-105"
+              : "transform hover:scale-105"
           ].join(" ")}
+            style={!isLoading && currentQuestionId && answer.trim() && !(!!nextAction && !shouldAutoAdvance) ? {
+              background: 'linear-gradient(180deg, #3b3f6d, #272b55)',
+              border: '2px solid var(--retro-border)',
+              boxShadow: '0 0 0 2px var(--retro-border-dark), 0 6px 0 rgba(0, 0, 0, 0.5)'
+            } : undefined}
         >
           {isLoading ? 'Submitting...' : isPracticeMode ? 'Get Feedback' : 'Submit Answer'}
         </button>
 
         {isShowingFeedback && (
-          <div className="mt-3 text-xs text-purple-300">
+          <div className="mt-3 text-xs text-cyan-300">
             Review your response and feedback, then continue.
           </div>
         )}
@@ -762,7 +784,12 @@ function Game() {
           {!shouldAutoAdvance && nextAction && (
             <button
               onClick={() => performNextAction(nextAction)}
-              className="w-full mt-3 bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-6 rounded-lg transition-all duration-200"
+              className="w-full mt-3 text-white font-bold py-3 px-6 rounded-lg transition-all duration-200"
+              style={{
+                background: 'linear-gradient(180deg, #3b3f6d, #272b55)',
+                border: '2px solid var(--retro-border)',
+                boxShadow: '0 0 0 2px var(--retro-border-dark), 0 6px 0 rgba(0, 0, 0, 0.5)'
+              }}
             >
               {nextAction.kind === 'results' ? 'View Results' : 'Next Question'}
             </button>
@@ -775,7 +802,7 @@ function Game() {
               localStorage.removeItem(GAME_STATE_KEY);
               navigate('/');
             }}
-            className="text-purple-300 hover:text-white underline"
+            className="text-cyan-300 hover:text-white underline"
           >
             {isPracticeMode ? 'End Practice' : 'Quit Game'}
           </button>

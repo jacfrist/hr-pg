@@ -80,18 +80,18 @@ export default function MicDictation({ value, onChange, disabled }: Props) {
         type="button"
         onClick={toggle}
         disabled={disabled}
-        className={`h-10 w-10 rounded-full flex items-center justify-center border transition
+        className={`h-8 w-8 rounded-full flex items-center justify-center border transition
           ${disabled ? "opacity-50 cursor-not-allowed" : "hover:scale-105"}
-          ${isListening ? "bg-red-600 border-red-500" : "bg-purple-700 border-purple-500"}
+          ${isListening ? "bg-red-600 border-red-500" : "bg-purple-700 border-cyan-500"}
         `}
         aria-label={isListening ? "Stop recording" : "Start recording"}
         title={isListening ? "Stop" : "Record"}
       >
         <span className="text-white text-lg">
             {isListening ? (
-                <StopIcon className="h-5 w-5 text-white" />
+                <StopIcon className="h-4 w-4 text-white" />
             ) : (
-                <MicIcon className="h-5 w-5 text-white" />
+                <MicIcon className="h-4 w-4 text-white" />
             )}
         </span>
       </button>
@@ -101,7 +101,7 @@ export default function MicDictation({ value, onChange, disabled }: Props) {
         type="button"
         onClick={clear}
         disabled={disabled || (!value.trim() && !interim)}
-        className="px-3 py-2 rounded-lg bg-purple-900 bg-opacity-50 border border-purple-600 text-white
+        className="px-2 py-1 rounded-lg text-sm bg-purple-900 bg-opacity-50 border border-cyan-600 text-white
                    disabled:opacity-50 disabled:cursor-not-allowed hover:bg-purple-800 transition"
       >
         Clear response
@@ -109,7 +109,7 @@ export default function MicDictation({ value, onChange, disabled }: Props) {
 
       {/* Optional live interim preview */}
       {isListening && interim ? (
-        <span className="text-purple-200 opacity-80 truncate">
+        <span className="text-cyan-200 opacity-80 truncate">
           {interim}
         </span>
       ) : null}

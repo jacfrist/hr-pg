@@ -144,3 +144,35 @@ hr {
 .retro-subtitle {
   color: var(--retro-secondary);
 }
+
+/* Nudge slider styling */
+.nudge-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: #ffffff;
+  cursor: pointer;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+  transition: transform 0.15s ease;
+}
+
+.nudge-slider::-webkit-slider-thumb:hover {
+  transform: scale(1.1);
+}
+
+.nudge-slider::-moz-range-thumb {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: #ffffff;
+  cursor: pointer;
+  border: none;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+  transition: transform 0.15s ease;
+}
+
+.nudge-slider::-moz-range-thumb:hover {
+  transform: scale(1.1);
+}
