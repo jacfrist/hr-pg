@@ -442,7 +442,11 @@ function Game() {
               src={currentSprite}
               alt="Boss"
               className="w-64 h-64 object-contain drop-shadow-lg"
-              style={{ imageRendering: 'pixelated' }}
+              style={{
+                imageRendering: 'pixelated',
+                transform: role === 'software_engineer' ? 'scale(0.8)' : 'scale(1)',
+                filter: role === 'software_engineer' ? 'brightness(1.2) contrast(1.5)' : 'none'
+              }}
             />
           </div>
 
