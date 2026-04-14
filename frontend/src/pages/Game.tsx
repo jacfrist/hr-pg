@@ -14,6 +14,9 @@ import dataBossDmg from '../assets/data-boss-dmg.png';
 import pmBoss from '../assets/pm-boss.png';
 import pmBossMove from '../assets/pm-boss-move.png';
 import pmBossDmg from '../assets/pm-boss-dmg.png';
+import player from '../assets/player.png';
+import playerMove from '../assets/player-move.png';
+import background from '../assets/background.png';
 
 const BOSS_SPRITES: Record<string, { idle: string; move: string; dmg: string }> = {
   software_engineer: { idle: sweBoss, move: sweBossMove, dmg: sweBossDmg },
@@ -91,6 +94,9 @@ function Game() {
   const [showDmg, setShowDmg] = useState(false);
   const prevBossHealth = useRef(gameState.bossHealth);
 
+  // Player sprite animation state
+  const [playerFrame, setPlayerFrame] = useState(0);
+
   const sprites = BOSS_SPRITES[role] || BOSS_SPRITES.software_engineer;
 
   // Idle animation: alternate between idle and move every 500ms
@@ -101,6 +107,14 @@ function Game() {
     }, 500);
     return () => clearInterval(timer);
   }, [showDmg]);
+
+  // Player animation: alternate between player and player-move every 500ms
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setPlayerFrame(f => (f === 0 ? 1 : 0));
+    }, 500);
+    return () => clearInterval(timer);
+  }, []);
 
   // Damage animation: trigger when boss health decreases
   useEffect(() => {
@@ -118,6 +132,8 @@ function Game() {
     : idleFrame === 0
       ? sprites.idle
       : sprites.move;
+
+  const currentPlayerSprite = playerFrame === 0 ? player : playerMove;
 
   const isShowingFeedback = Boolean(gameState.feedback);
 
@@ -369,11 +385,11 @@ function Game() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-purple-900 via-purple-800 to-indigo-900 p-4 pt-20">
+    <div className="min-h-screen p-4 pt-20">
       <div className="max-w-4xl mx-auto">
 
         {/* Top meta row */}
-        <div className="flex items-center justify-between mb-3 text-sm text-purple-300">
+        <div className="flex items-center justify-between mb-3 text-sm text-cyan-300">
           <span>Question <span className="text-white font-semibold">{gameState.currentQuestion}</span> of {gameState.totalQuestions}</span>
           <span>Difficulty: <span className="text-white font-semibold">{difficulty}</span></span>
           <span>
@@ -381,74 +397,105 @@ function Game() {
           </span>
         </div>
 
-        {!isPracticeMode ? (
-          /* Health Bars — compact */
-          <div className="space-y-2">
-            <div>
-              <div className="flex justify-between mb-1">
-                <span className="text-white text-xs font-semibold">Boss (Recruiter)</span>
-                <span className="text-white text-xs">{gameState.bossHealth}%</span>
-              </div>
-              <div className="w-full bg-gray-700 rounded-full h-3">
-                <div
-                  className={`${getHealthBarColor(gameState.bossHealth)} h-3 rounded-full transition-all duration-500`}
-                  style={{ width: `${gameState.bossHealth}%` }}
-                />
+        {/* Game Scene Window - Pokemon Battle Style */}
+        <div
+          className="relative w-full h-96 mb-6 rounded-lg overflow-hidden border-2 shadow-2xl"
+          style={{
+            backgroundImage: `url(${background})`,
+            backgroundSize: 'cover',
+            backgroundPosition: 'center',
+            imageRendering: 'pixelated',
+            borderColor: 'var(--retro-border)'
+          }}
+        >
+          {/* Player Sprite - Bottom Left (Foreground) */}
+          <div className="absolute bottom-0 left-0 w-64 h-64 overflow-hidden">
+            <img
+              src={currentPlayerSprite}
+              alt="Player"
+              className="w-full h-full object-cover object-top-left"
+              style={{ imageRendering: 'pixelated' }}
+            />
+          </div>
+
+          {/* Player Health Bar - Above Player */}
+          {!isPracticeMode && (
+            <div className="absolute bottom-64 left-16 w-48">
+              <div className="bg-white bg-opacity-90 rounded-lg p-2 shadow-lg border-2 border-gray-800">
+                <div className="flex justify-between mb-1">
+                  <span className="text-gray-800 text-xs font-bold">You</span>
+                  <span className="text-gray-800 text-xs font-bold">{gameState.playerHealth}%</span>
+                </div>
+                <div className="w-full bg-gray-400 rounded-full h-2 border border-gray-600">
+                  <div
+                    className={`${getHealthBarColor(gameState.playerHealth)} h-2 rounded-full transition-all duration-500`}
+                    style={{ width: `${gameState.playerHealth}%` }}
+                  />
+                </div>
               </div>
             </div>
+          )}
 
-            <div>
-              <div className="flex justify-between mb-1">
-                <span className="text-white text-xs font-semibold">You (Candidate)</span>
-                <span className="text-white text-xs">{gameState.playerHealth}%</span>
-              </div>
-              <div className="w-full bg-gray-700 rounded-full h-3">
-                <div
-                  className={`${getHealthBarColor(gameState.playerHealth)} h-3 rounded-full transition-all duration-500`}
-                  style={{ width: `${gameState.playerHealth}%` }}
-                />
+          {/* Boss Sprite - Top Right */}
+          <div className="absolute top-16 right-12">
+            <img
+              src={currentSprite}
+              alt="Boss"
+              className="w-64 h-64 object-contain drop-shadow-lg"
+              style={{ imageRendering: 'pixelated' }}
+            />
+          </div>
+
+          {/* Boss Health Bar - Above Boss */}
+          {!isPracticeMode && (
+            <div className="absolute top-8 right-48 w-48">
+              <div className="bg-white bg-opacity-90 rounded-lg p-2 shadow-lg border-2 border-gray-800">
+                <div className="flex justify-between mb-1">
+                  <span className="text-gray-800 text-xs font-bold">Boss</span>
+                  <span className="text-gray-800 text-xs font-bold">{gameState.bossHealth}%</span>
+                </div>
+                <div className="w-full bg-gray-400 rounded-full h-2 border border-gray-600">
+                  <div
+                    className={`${getHealthBarColor(gameState.bossHealth)} h-2 rounded-full transition-all duration-500`}
+                    style={{ width: `${gameState.bossHealth}%` }}
+                  />
+                </div>
               </div>
             </div>
-          </div>
-        ) : (
-          <div className="rounded-lg border border-cyan-500 bg-cyan-900 bg-opacity-30 px-4 py-2 flex items-center gap-3">
-            <span className="text-cyan-200 font-bold text-sm">Practice Mode</span>
-            <span className="text-cyan-100 text-xs">Focus on feedback and improving each response.</span>
-          </div>
-        )}
+          )}
 
-        {/* Boss Sprite */}
-        <div className="flex justify-center">
-          <img
-            src={currentSprite}
-            alt="Boss"
-            className="w-48 h-48 object-contain drop-shadow-lg"
-            style={{ imageRendering: 'pixelated' }}
-          />
+          {/* Practice Mode Badge */}
+          {isPracticeMode && (
+            <div className="absolute top-4 left-1/2 transform -translate-x-1/2">
+              <div className="rounded-lg border-2 border-cyan-400 bg-cyan-900 bg-opacity-90 px-4 py-2 shadow-lg">
+                <span className="text-cyan-200 font-bold text-sm">Practice Mode</span>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Question Card */}
-        <div className="bg-purple-800 bg-opacity-50 rounded-lg p-6 backdrop-blur-sm border border-purple-600 mb-6">
-          <h2 className="text-xl text-white font-bold mb-4">
+        <div className="retro-panel mb-6">
+          <h2 className="text-lg tracking-tight text-white font-bold mb-2">
             {gameState.question || 'Loading question...'}
           </h2>
 
           {gameState.feedback && (
-            <div className="mb-4 p-4 bg-purple-900 bg-opacity-50 rounded-lg border border-purple-500">
-              <p className="text-purple-200">{gameState.feedback}</p>
+            <div className="mb-2 p-4 rounded-lg border-2" style={{ borderColor: 'var(--retro-border)', backgroundColor: 'rgba(31, 36, 64, 0.6)' }}>
+              <p className="text-cyan-200">{gameState.feedback}</p>
             </div>
           )}
 
           {error && (
-            <div className="mb-4 p-4 bg-red-900 bg-opacity-50 rounded-lg border border-red-500">
+            <div className="mb-2 p-4 bg-red-900 bg-opacity-50 rounded-lg border border-red-500">
               <p className="text-red-200">{error}</p>
             </div>
           )}
 
           {gameplaySettings.showTooltips && !gameState.feedback && (
-            <div className="mb-4 p-4 bg-purple-900 bg-opacity-40 rounded-lg border border-purple-600">
-              <div className="text-purple-200 text-sm font-semibold mb-2">STAR method quick reminder</div>
-              <ul className="text-purple-200 text-sm list-disc pl-5 space-y-1">
+            <div className="mb-2 p-4 rounded-lg border-2" style={{ borderColor: 'var(--retro-border)', backgroundColor: 'rgba(31, 36, 64, 0.4)' }}>
+              <div className="text-cyan-200 text-sm font-semibold mb-2">STAR method quick reminder</div>
+              <ul className="text-cyan-200 text-sm list-disc pl-5 space-y-1">
                 <li><b>Situation:</b> set the context (1 sentence)</li>
                 <li><b>Task:</b> what you needed to achieve</li>
                 <li><b>Action:</b> what <i>you</i> did (be specific)</li>
@@ -463,7 +510,14 @@ function Game() {
           <textarea
             value={answer}
             onChange={(e) => setAnswer(e.target.value)}
-            className={`w-full ${isShowingFeedback ? 'h-24' : 'h-40'} p-4 bg-purple-900 bg-opacity-50 border border-purple-600 rounded-lg text-white placeholder-purple-400 focus:outline-none focus:border-purple-400 mb-4`}
+            className={`w-full ${isShowingFeedback ? 'h-24' : 'h-40'} p-4 rounded-lg text-white mb-2 placeholder-cyan-400`}
+            style={{
+              backgroundColor: 'var(--retro-panel)',
+              border: '2px solid var(--retro-border)',
+              boxShadow: 'inset 0 0 0 2px var(--retro-border-dark)'
+            }}
+            onFocus={(e) => e.target.style.borderColor = 'var(--retro-accent)'}
+            onBlur={(e) => e.target.style.borderColor = 'var(--retro-border)'}
             placeholder="Type your answer here using the STAR method (Situation, Task, Action, Result)..."
             disabled={isLoading || isShowingFeedback}
           />
@@ -479,18 +533,23 @@ function Game() {
               (!!nextAction && !shouldAutoAdvance)
             }
             className={[
-              "w-full text-white font-bold py-3 px-6 rounded-lg transition-all duration-200",
+              "w-full text-white text-sm font-bold py-2 px-4 rounded-lg transition-all duration-200",
               (isLoading || !currentQuestionId || !answer.trim() || (!!nextAction && !shouldAutoAdvance))
                 ? "bg-gray-600 cursor-not-allowed"
-                : "bg-purple-600 hover:bg-purple-700 transform hover:scale-105"
+                : "transform hover:scale-105"
             ].join(" ")}
+            style={!isLoading && currentQuestionId && answer.trim() && !(!!nextAction && !shouldAutoAdvance) ? {
+              background: 'linear-gradient(180deg, #3b3f6d, #272b55)',
+              border: '2px solid var(--retro-border)',
+              boxShadow: '0 0 0 2px var(--retro-border-dark), 0 6px 0 rgba(0, 0, 0, 0.5)'
+            } : undefined}
           >
             {isLoading ? 'Submitting...' : isPracticeMode ? 'Get Feedback' : 'Submit Answer'}
           </button>
         )}
 
         {isShowingFeedback && (
-          <div className="mt-3 text-xs text-purple-300">
+          <div className="mt-3 text-xs text-cyan-300">
             Review your response and feedback, then continue.
           </div>
         )}
@@ -498,7 +557,12 @@ function Game() {
           {!shouldAutoAdvance && nextAction && (
             <button
               onClick={() => performNextAction(nextAction)}
-              className="w-full mt-3 bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-6 rounded-lg transition-all duration-200"
+              className="w-full mt-3 text-white font-bold py-3 px-6 rounded-lg transition-all duration-200"
+              style={{
+                background: 'linear-gradient(180deg, #3b3f6d, #272b55)',
+                border: '2px solid var(--retro-border)',
+                boxShadow: '0 0 0 2px var(--retro-border-dark), 0 6px 0 rgba(0, 0, 0, 0.5)'
+              }}
             >
               {nextAction.kind === 'results' ? 'View Results' : 'Next Question'}
             </button>
@@ -511,7 +575,7 @@ function Game() {
               localStorage.removeItem(GAME_STATE_KEY);
               navigate('/');
             }}
-            className="text-purple-300 hover:text-white underline"
+            className="text-cyan-300 hover:text-white underline"
           >
             {isPracticeMode ? 'End Practice' : 'Quit Game'}
           </button>

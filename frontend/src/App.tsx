@@ -15,19 +15,29 @@ function App() {
 
   return (
     <Router>
-      <div className="fixed top-0 left-0 right-0 z-50">
-        <div className="max-w-7xl mx-auto px-4 py-4 flex items-center justify-between gap-2">
+      <div className="fixed top-0 left-0 right-0 z-50 bg-black">
+        <div className="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between gap-2">
           <div className="flex items-center gap-2">
             <Link
               to="/settings"
-              className="bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded text-sm transition-colors border border-purple-400 inline-block"
+              className="text-white tracking-tighter font-bold py-1 px-4 rounded text-xs transition-colors inline-block"
+              style={{
+                background: 'linear-gradient(180deg, #3b3f6d, #272b55)',
+                border: '2px solid var(--retro-border)',
+                boxShadow: '0 0 0 2px var(--retro-border-dark)'
+              }}
             >
               Settings
             </Link>
             {user && (
               <Link
                 to="/history"
-                className="bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded text-sm transition-colors border border-purple-400 inline-block"
+                className="text-white tracking-tighter font-bold py-1 px-4 rounded text-xs transition-colors inline-block"
+                style={{
+                  background: 'linear-gradient(180deg, #3b3f6d, #272b55)',
+                  border: '2px solid var(--retro-border)',
+                  boxShadow: '0 0 0 2px var(--retro-border-dark)'
+                }}
               >
                 History
               </Link>
@@ -36,10 +46,15 @@ function App() {
           <div className="flex items-center gap-2">
             {user ? (
               <>
-                <span className="text-purple-200 text-xs sm:text-sm hidden md:inline truncate max-w-[150px] lg:max-w-none">Logged in as {user.email}</span>
+                <span className="text-cyan-200 text-xs sm:text-xs hidden md:inline truncate max-w-[150px] lg:max-w-none">{user.email}</span>
                 <button
                   onClick={logout}
-                  className="bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded text-sm transition-colors border border-purple-400 whitespace-nowrap"
+                  className="text-white tracking-tight font-bold py-1 px-4 rounded text-xs transition-colors whitespace-nowrap"
+                  style={{
+                    background: 'linear-gradient(180deg, #3b3f6d, #272b55)',
+                    border: '2px solid var(--retro-border)',
+                    boxShadow: '0 0 0 2px var(--retro-border-dark)'
+                  }}
                 >
                   Logout
                 </button>
@@ -47,7 +62,12 @@ function App() {
             ) : (
               <button
                 onClick={() => setIsModalOpen(true)}
-                className="bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded text-sm transition-colors border border-purple-400 whitespace-nowrap"
+                className="text-white tracking-tighter font-bold py-1 px-4 rounded text-xs transition-colors whitespace-nowrap"
+                style={{
+                  background: 'linear-gradient(180deg, #3b3f6d, #272b55)',
+                  border: '2px solid var(--retro-border)',
+                  boxShadow: '0 0 0 2px var(--retro-border-dark)'
+                }}
               >
                 Login / Register
               </button>
