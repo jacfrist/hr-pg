@@ -4,6 +4,7 @@ import axios from 'axios';
 import { API_BASE_URL } from '../config';
 import { useAuth } from '../context/AuthContext';
 import MicDictation from '../components/asr/MicDictation';
+import { playPlayerAttack, playBossAttack } from '../audio/sfx';
 
 import sweBoss from '../assets/swe-boss.png';
 import sweBossMove from '../assets/swe-boss-move.png';
@@ -323,6 +324,9 @@ function Game() {
         feedback: response.data.feedback
       }));
 
+      if (newBossHealth < gameState.bossHealth) playPlayerAttack();
+      if (newPlayerHealth < gameState.playerHealth) playBossAttack();
+
       const computed: NextAction = (() => {
         const nextQuestionNumber = gameState.currentQuestion + 1;
 
@@ -469,25 +473,25 @@ function Game() {
           />
         </div>
 
-        {!isShowingFeedback && (
-          <button
-            onClick={submitAnswer}
-            disabled={
-              isLoading ||
-              !currentQuestionId ||
-              !answer.trim() ||
-              (!!nextAction && !shouldAutoAdvance)
-            }
-            className={[
-              "w-full text-white font-bold py-3 px-6 rounded-lg transition-all duration-200",
-              (isLoading || !currentQuestionId || !answer.trim() || (!!nextAction && !shouldAutoAdvance))
-                ? "bg-gray-600 cursor-not-allowed"
-                : "bg-purple-600 hover:bg-purple-700 transform hover:scale-105"
-            ].join(" ")}
-          >
-            {isLoading ? 'Submitting...' : isPracticeMode ? 'Get Feedback' : 'Submit Answer'}
-          </button>
-        )}
+        <button
+          onClick={submitAnswer}
+          disabled={
+            isLoading ||
+            !currentQuestionId ||
+            !gameState.question ||
+            !answer.trim() ||
+            isShowingFeedback ||
+            (!!nextAction && !shouldAutoAdvance)
+          }
+          className={[
+            "w-full text-white font-bold py-3 px-6 rounded-lg transition-all duration-200",
+            (isLoading || !currentQuestionId || !gameState.question || !answer.trim() || isShowingFeedback || (!!nextAction && !shouldAutoAdvance))
+              ? "bg-gray-600 cursor-not-allowed opacity-50"
+              : "bg-purple-600 hover:bg-purple-700 transform hover:scale-105"
+          ].join(" ")}
+        >
+          {isLoading ? 'Submitting...' : isPracticeMode ? 'Get Feedback' : 'Submit Answer'}
+        </button>
 
         {isShowingFeedback && (
           <div className="mt-3 text-xs text-purple-300">
