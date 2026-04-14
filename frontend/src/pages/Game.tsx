@@ -188,8 +188,12 @@ function Game() {
   const shouldAutoAdvance = isPracticeMode ? false : gameplaySettings.autoAdvance;
   const [nextAction, setNextAction] = useState<NextAction | null>(null);
 
-  const [stopwatchEnabled, setStopwatchEnabled] = useState(() => loadStopwatchPrefs().enabled);
-  const [nudgeTemperature, setNudgeTemperature] = useState(() => loadStopwatchPrefs().temperature);
+  // Read stopwatch settings from URL params (passed from LevelSelect)
+  const stopwatchFromUrl = searchParams.get('stopwatch') === 'true';
+  const nudgeTempFromUrl = Number(searchParams.get('nudgeTemp')) || 35;
+
+  const [stopwatchEnabled, setStopwatchEnabled] = useState(() => stopwatchFromUrl);
+  const [nudgeTemperature, setNudgeTemperature] = useState(() => nudgeTempFromUrl);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [latestNudge, setLatestNudge] = useState<string | null>(null);
   const [nudgeLoading, setNudgeLoading] = useState(false);
@@ -609,110 +613,65 @@ function Game() {
             </div>
           )}
 
-          {/* Boss Sprite and Stopwatch/Nudge Controls - Top Right */}
-        <div className="mb-6 rounded-lg border border-purple-500/70 bg-purple-900/35 p-4 backdrop-blur-sm">
-          <div className="flex flex-col gap-6 md:flex-row">
-            {/* Boss sprite */}
-              <div className="absolute top-16 right-12 items-center md:pr-8">
-                <img
-                  src={currentSprite}
-                  alt="Boss"
-                  className="w-64 h-64 object-contain drop-shadow-lg"
-                  style={{
+          {/* Stopwatch Timer - Top Right Corner */}
+          {stopwatchEnabled && (
+            <div className="absolute top-4 right-4">
+              <div
+                className="font-mono text-3xl text-white tabular-nums tracking-wider drop-shadow-lg"
+                style={{ textShadow: '2px 2px 4px rgba(0,0,0,0.8)' }}
+                aria-live="polite"
+              >
+                {formatStopwatchTime(elapsedSeconds)}
+              </div>
+            </div>
+          )}
+
+          {/* Boss Sprite - Top Right */}
+          <div className="absolute top-16 right-12">
+            <img
+              src={currentSprite}
+              alt="Boss"
+              className="w-64 h-64 object-contain drop-shadow-lg"
+              style={{
                 imageRendering: 'pixelated',
                 transform: role === 'software_engineer' ? 'scale(0.8)' : 'scale(1)',
-                filter: role === 'software_engineer' ? 'brightness(1.2) contrast(1.5)' : 'none'
+                filter: role === 'software_engineer' ? 'brightness(1.2) contrast(1.1)' : 'none'
               }}
-                />
-            </div>
-            {/* Stopwatch/Nudge controls */}
-            <div className="flex-1 flex flex-col gap-3 sm:gap-5">
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                <div className="flex items-start gap-3 min-w-0">
-                  <button
-                    type="button"
-                    role="switch"
-                    aria-checked={stopwatchEnabled}
-                    onClick={() => setStopwatchEnabled((v) => !v)}
-                    className={[
-                      'relative mt-0.5 h-7 w-12 shrink-0 rounded-full transition-colors duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-purple-300 focus-visible:ring-offset-2 focus-visible:ring-offset-purple-950',
-                      stopwatchEnabled ? 'bg-emerald-600' : 'bg-gray-600',
-                    ].join(' ')}
-                  >
-                    <span
-                      className={[
-                        'absolute top-0.5 left-0.5 h-6 w-6 rounded-full bg-white shadow transition-transform duration-200',
-                        stopwatchEnabled ? 'translate-x-5' : 'translate-x-0',
-                      ].join(' ')}
-                    />
-                  </button>
-                  <div className="min-w-0">
-                    <div className="text-white font-semibold text-sm">Interview stopwatch</div>
-                    <p className="text-purple-300 text-xs mt-1 leading-relaxed">
-                      {stopwatchEnabled
-                        ? 'Time counts only while you are drafting an answer (paused during feedback). The clock resets for each new question and whenever you turn this off and on.'
-                        : `Simulate pacing: optional AI interviewer lines every ${NUDGE_INTERVAL_SECONDS} seconds, tuned from supportive to high-pressure.`}
-                    </p>
-                  </div>
-                </div>
-                {stopwatchEnabled && (
-                  <div
-                    className="font-mono text-2xl sm:text-3xl text-white tabular-nums tracking-wider text-right sm:pt-0.5"
-                    aria-live="polite"
-                  >
-                    {formatStopwatchTime(elapsedSeconds)}
-                  </div>
+            />
+          </div>
+
+          {/* Boss Speech Bubble - Interviewer Prompts */}
+          {stopwatchEnabled && (nudgeLoading || (latestNudge && !isShowingFeedback)) && (
+            <div className="absolute top-48 right-64 w-64">
+              {/* Speech bubble tail */}
+              <div
+                className="absolute top-4 -right-3 w-0 h-0"
+                style={{
+                  borderTop: '10px solid transparent',
+                  borderBottom: '10px solid transparent',
+                  borderLeft: '14px solid rgba(255, 255, 255, 0.95)',
+                  filter: 'drop-shadow(2px 0px 2px rgba(0,0,0,0.2))'
+                }}
+              />
+              {/* Speech bubble content */}
+              <div
+                className={[
+                  'rounded-lg px-4 py-3 text-[10px] leading-snug shadow-xl',
+                  nudgeTemperature >= 67
+                    ? 'border-2 border-amber-500 bg-amber-50/95 text-amber-900'
+                    : nudgeTemperature <= 33
+                      ? 'border-2 border-cyan-500 bg-cyan-50/95 text-cyan-900'
+                      : 'border-2 border-purple-400 bg-white/95 text-gray-800',
+                ].join(' ')}
+              >
+                {nudgeLoading ? (
+                  <span className="italic opacity-75">...</span>
+                ) : (
+                  <span>{latestNudge}</span>
                 )}
               </div>
-              {stopwatchEnabled && (
-                <div className="mt-4 pt-4 border-t border-purple-600/50">
-                  <div className="flex justify-between gap-2 text-xs text-purple-200 mb-2">
-                    <span className="text-cyan-200/95">Supportive</span>
-                    <span className="text-purple-300/90 hidden sm:inline">Nudge intensity</span>
-                    <span className="text-amber-200/95">High pressure</span>
-                  </div>
-                  <input
-                    type="range"
-                    min={0}
-                    max={100}
-                    value={nudgeTemperature}
-                    onChange={(e) => setNudgeTemperature(Number(e.target.value))}
-                    className="w-full h-2 rounded-full appearance-none cursor-pointer bg-purple-950 accent-fuchsia-500"
-                    style={{
-                      background: `linear-gradient(to right, rgb(34 211 238 / 0.35) 0%, rgb(168 85 247 / 0.35) 50%, rgb(245 158 11 / 0.35) 100%)`,
-                    }}
-                    aria-valuemin={0}
-                    aria-valuemax={100}
-                    aria-valuenow={nudgeTemperature}
-                    aria-label="Interviewer nudge intensity from supportive to high pressure"
-                  />
-                  <p className="text-xs text-purple-300/85 mt-3 leading-relaxed">
-                    While the stopwatch runs, an AI-generated interviewer line appears every {NUDGE_INTERVAL_SECONDS}{' '}
-                    seconds. The slider shapes how warm or demanding that voice sounds.
-                  </p>
-                  {(nudgeLoading || (latestNudge && !isShowingFeedback)) && (
-                    <div
-                      className={[
-                        'mt-3 rounded-md border px-3 py-2.5 text-sm leading-snug',
-                        nudgeTemperature >= 67
-                          ? 'border-amber-500/70 bg-amber-950/35 text-amber-50'
-                          : nudgeTemperature <= 33
-                            ? 'border-cyan-500/60 bg-cyan-950/25 text-cyan-50'
-                            : 'border-purple-400/55 bg-purple-950/40 text-purple-100',
-                      ].join(' ')}
-                    >
-                      {nudgeLoading ? (
-                        <span className="text-purple-200/90 italic">Interviewer is speaking…</span>
-                      ) : (
-                        <span>{latestNudge}</span>
-                      )}
-                    </div>
-                  )}
-                </div>
-              )}
             </div>
-          </div>
-          </div>
+          )}
 
           {/* Boss Health Bar - Above Boss */}
           {!isPracticeMode && (
