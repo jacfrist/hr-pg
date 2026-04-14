@@ -33,6 +33,52 @@ interface GameState {
 const GAME_STATE_KEY = 'hrpg_game_state_v1';
 const SETTINGS_KEY = 'hrpg_settings';
 const JOB_DESCRIPTION_DRAFT_KEY = 'hrpg_job_description_draft';
+const STOPWATCH_PREFS_KEY = 'hrpg_game_stopwatch';
+
+const NUDGE_INTERVAL_SECONDS = 20;
+
+type StopwatchPrefs = {
+  enabled: boolean;
+  temperature: number;
+};
+
+function loadStopwatchPrefs(): StopwatchPrefs {
+  try {
+    const raw = localStorage.getItem(STOPWATCH_PREFS_KEY);
+    if (!raw) return { enabled: false, temperature: 35 };
+    const p = JSON.parse(raw) as Partial<StopwatchPrefs>;
+    return {
+      enabled: Boolean(p.enabled),
+      temperature:
+        typeof p.temperature === 'number'
+          ? Math.min(100, Math.max(0, p.temperature))
+          : 35,
+    };
+  } catch {
+    return { enabled: false, temperature: 35 };
+  }
+}
+
+function stripHyphensFromNudge(text: string): string {
+  return text
+    .replace(/\u2013/g, " ")
+    .replace(/\u2014/g, " ")
+    .replace(/\u2212/g, " ")
+    .replace(/-+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function formatStopwatchTime(totalSeconds: number): string {
+  const s = Math.max(0, Math.floor(totalSeconds));
+  const m = Math.floor(s / 60);
+  const r = s % 60;
+  const h = Math.floor(m / 60);
+  if (h > 0) {
+    return `${h}:${String(m % 60).padStart(2, '0')}:${String(r).padStart(2, '0')}`;
+  }
+  return `${String(m).padStart(2, '0')}:${String(r).padStart(2, '0')}`;
+}
 
 type GameplaySettings = {
   autoAdvance: boolean;
@@ -124,6 +170,129 @@ function Game() {
   const [gameplaySettings, setGameplaySettings] = useState<GameplaySettings>(() => loadGameplaySettings());
   const shouldAutoAdvance = isPracticeMode ? false : gameplaySettings.autoAdvance;
   const [nextAction, setNextAction] = useState<NextAction | null>(null);
+
+  const [stopwatchEnabled, setStopwatchEnabled] = useState(() => loadStopwatchPrefs().enabled);
+  const [nudgeTemperature, setNudgeTemperature] = useState(() => loadStopwatchPrefs().temperature);
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);
+  const [latestNudge, setLatestNudge] = useState<string | null>(null);
+  const [nudgeLoading, setNudgeLoading] = useState(false);
+
+  const nudgeBucketRef = useRef(0);
+  const nudgeInFlightRef = useRef(false);
+  const currentQuestionIdRef = useRef<number | null>(null);
+  currentQuestionIdRef.current = currentQuestionId;
+  const isShowingFeedbackRef = useRef(isShowingFeedback);
+  isShowingFeedbackRef.current = isShowingFeedback;
+
+  useEffect(() => {
+    localStorage.setItem(
+      STOPWATCH_PREFS_KEY,
+      JSON.stringify({ enabled: stopwatchEnabled, temperature: nudgeTemperature })
+    );
+  }, [stopwatchEnabled, nudgeTemperature]);
+
+  useEffect(() => {
+    if (!stopwatchEnabled) {
+      setElapsedSeconds(0);
+      nudgeBucketRef.current = 0;
+      setLatestNudge(null);
+      setNudgeLoading(false);
+      return;
+    }
+    setElapsedSeconds(0);
+    nudgeBucketRef.current = 0;
+    setLatestNudge(null);
+  }, [stopwatchEnabled]);
+
+  useEffect(() => {
+    if (!currentQuestionId) return;
+    setElapsedSeconds(0);
+    nudgeBucketRef.current = 0;
+    setLatestNudge(null);
+  }, [currentQuestionId]);
+
+  const stopwatchActive =
+    stopwatchEnabled &&
+    !isShowingFeedback &&
+    Boolean(currentQuestionId) &&
+    gameState.question.trim().length > 0;
+
+  useEffect(() => {
+    if (!stopwatchActive) return;
+    const id = window.setInterval(() => {
+      setElapsedSeconds((e) => e + 1);
+    }, 1000);
+    return () => window.clearInterval(id);
+  }, [stopwatchActive]);
+
+  useEffect(() => {
+    if (!stopwatchActive) return;
+    if (elapsedSeconds <= 0 || elapsedSeconds % NUDGE_INTERVAL_SECONDS !== 0) return;
+    const bucket = elapsedSeconds / NUDGE_INTERVAL_SECONDS;
+    if (bucket <= nudgeBucketRef.current) return;
+
+    const questionSnapshot = gameState.question;
+    const qidSnapshot = currentQuestionIdRef.current;
+    if (!questionSnapshot.trim() || nudgeInFlightRef.current) return;
+
+    nudgeBucketRef.current = bucket;
+    nudgeInFlightRef.current = true;
+    setNudgeLoading(true);
+
+    axios
+      .post(`${API_BASE_URL}/api/game/nudge`, {
+        role,
+        difficulty,
+        interviewType,
+        question: questionSnapshot,
+        nudgeTemperature,
+        secondsElapsed: elapsedSeconds,
+      })
+      .then((res) => {
+        if (
+          currentQuestionIdRef.current !== qidSnapshot ||
+          isShowingFeedbackRef.current
+        ) {
+          return;
+        }
+        const text = res.data?.nudge;
+        if (typeof text === 'string' && text.trim()) {
+          setLatestNudge(stripHyphensFromNudge(text.trim()));
+        }
+      })
+      .catch(() => {
+        if (
+          currentQuestionIdRef.current !== qidSnapshot ||
+          isShowingFeedbackRef.current
+        ) {
+          return;
+        }
+        setLatestNudge(
+          nudgeTemperature >= 70
+            ? "We are almost out of time here. I need a direct answer from you now, in one or two clear sentences."
+            : "Take a breath. You have got this. Walk through Situation, Task, Action, Result, then submit when you feel ready."
+        );
+      })
+      .finally(() => {
+        nudgeInFlightRef.current = false;
+        setNudgeLoading(false);
+      });
+  }, [
+    elapsedSeconds,
+    stopwatchActive,
+    role,
+    difficulty,
+    interviewType,
+    nudgeTemperature,
+    gameState.question,
+  ]);
+
+  useEffect(() => {
+    if (isShowingFeedback) {
+      setLatestNudge(null);
+      setNudgeLoading(false);
+    }
+  }, [isShowingFeedback]);
 
   useEffect(() => {
     const onStorage = (e: StorageEvent) => {
@@ -417,14 +586,105 @@ function Game() {
           </div>
         )}
 
-        {/* Boss Sprite */}
-        <div className="flex justify-center">
-          <img
-            src={currentSprite}
-            alt="Boss"
-            className="w-48 h-48 object-contain drop-shadow-lg"
-            style={{ imageRendering: 'pixelated' }}
-          />
+        {/* Boss Sprite and Stopwatch/Nudge Controls */}
+        <div className="mb-6 rounded-lg border border-purple-500/70 bg-purple-900/35 p-4 backdrop-blur-sm">
+          <div className="flex flex-col gap-6 md:flex-row">
+            {/* Boss sprite */}
+            <div className="flex justify-center items-center md:pr-8">
+              <img
+                src={currentSprite}
+                alt="Boss"
+                className="w-48 h-48 object-contain drop-shadow-lg"
+                style={{ imageRendering: 'pixelated' }}
+              />
+            </div>
+            {/* Stopwatch/Nudge controls */}
+            <div className="flex-1 flex flex-col gap-3 sm:gap-5">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                <div className="flex items-start gap-3 min-w-0">
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={stopwatchEnabled}
+                    onClick={() => setStopwatchEnabled((v) => !v)}
+                    className={[
+                      'relative mt-0.5 h-7 w-12 shrink-0 rounded-full transition-colors duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-purple-300 focus-visible:ring-offset-2 focus-visible:ring-offset-purple-950',
+                      stopwatchEnabled ? 'bg-emerald-600' : 'bg-gray-600',
+                    ].join(' ')}
+                  >
+                    <span
+                      className={[
+                        'absolute top-0.5 left-0.5 h-6 w-6 rounded-full bg-white shadow transition-transform duration-200',
+                        stopwatchEnabled ? 'translate-x-5' : 'translate-x-0',
+                      ].join(' ')}
+                    />
+                  </button>
+                  <div className="min-w-0">
+                    <div className="text-white font-semibold text-sm">Interview stopwatch</div>
+                    <p className="text-purple-300 text-xs mt-1 leading-relaxed">
+                      {stopwatchEnabled
+                        ? 'Time counts only while you are drafting an answer (paused during feedback). The clock resets for each new question and whenever you turn this off and on.'
+                        : `Simulate pacing: optional AI interviewer lines every ${NUDGE_INTERVAL_SECONDS} seconds, tuned from supportive to high-pressure.`}
+                    </p>
+                  </div>
+                </div>
+                {stopwatchEnabled && (
+                  <div
+                    className="font-mono text-2xl sm:text-3xl text-white tabular-nums tracking-wider text-right sm:pt-0.5"
+                    aria-live="polite"
+                  >
+                    {formatStopwatchTime(elapsedSeconds)}
+                  </div>
+                )}
+              </div>
+              {stopwatchEnabled && (
+                <div className="mt-4 pt-4 border-t border-purple-600/50">
+                  <div className="flex justify-between gap-2 text-xs text-purple-200 mb-2">
+                    <span className="text-cyan-200/95">Supportive</span>
+                    <span className="text-purple-300/90 hidden sm:inline">Nudge intensity</span>
+                    <span className="text-amber-200/95">High pressure</span>
+                  </div>
+                  <input
+                    type="range"
+                    min={0}
+                    max={100}
+                    value={nudgeTemperature}
+                    onChange={(e) => setNudgeTemperature(Number(e.target.value))}
+                    className="w-full h-2 rounded-full appearance-none cursor-pointer bg-purple-950 accent-fuchsia-500"
+                    style={{
+                      background: `linear-gradient(to right, rgb(34 211 238 / 0.35) 0%, rgb(168 85 247 / 0.35) 50%, rgb(245 158 11 / 0.35) 100%)`,
+                    }}
+                    aria-valuemin={0}
+                    aria-valuemax={100}
+                    aria-valuenow={nudgeTemperature}
+                    aria-label="Interviewer nudge intensity from supportive to high pressure"
+                  />
+                  <p className="text-xs text-purple-300/85 mt-3 leading-relaxed">
+                    While the stopwatch runs, an AI-generated interviewer line appears every {NUDGE_INTERVAL_SECONDS}{' '}
+                    seconds. The slider shapes how warm or demanding that voice sounds.
+                  </p>
+                  {(nudgeLoading || (latestNudge && !isShowingFeedback)) && (
+                    <div
+                      className={[
+                        'mt-3 rounded-md border px-3 py-2.5 text-sm leading-snug',
+                        nudgeTemperature >= 67
+                          ? 'border-amber-500/70 bg-amber-950/35 text-amber-50'
+                          : nudgeTemperature <= 33
+                            ? 'border-cyan-500/60 bg-cyan-950/25 text-cyan-50'
+                            : 'border-purple-400/55 bg-purple-950/40 text-purple-100',
+                      ].join(' ')}
+                    >
+                      {nudgeLoading ? (
+                        <span className="text-purple-200/90 italic">Interviewer is speaking…</span>
+                      ) : (
+                        <span>{latestNudge}</span>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
         </div>
 
         {/* Question Card */}

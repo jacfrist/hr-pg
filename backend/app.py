@@ -66,7 +66,7 @@ def normalize_difficulty(difficulty, fallback: str = "Medium") -> str:
         return "Hard"
     return fallback
 
-def make_llm_request(messages, max_retries=3, backoff_factor=1.5):
+def make_llm_request(messages, max_retries=3, backoff_factor=1.5, max_tokens=4096, temperature=0.7):
 
     # Validate input
     if not messages:
@@ -90,8 +90,8 @@ def make_llm_request(messages, max_retries=3, backoff_factor=1.5):
 
     payload = {
         "data": {
-            "temperature": 0.7,
-            "max_tokens": 4096,
+            "temperature": float(temperature),
+            "max_tokens": int(max_tokens),
             "dataSources": [],
             "messages": messages,
             "options": {
@@ -265,6 +265,94 @@ FEEDBACK: Good use of the STAR method with a relevant example, but could have el
             print(f"Error parsing AI response: {e}")
 
     return None, None
+
+
+def generate_interview_nudge_with_ai(
+    role,
+    difficulty,
+    question_text,
+    interview_type,
+    nudge_temperature_0_100,
+    seconds_elapsed,
+):
+    """
+    Short recruiter-style line to simulate time pressure during practice.
+    nudge_temperature_0_100: 0 = warm/supportive, 100 = cold/hostile (professional).
+    """
+    role_info = ROLE_INFO.get(role, ROLE_INFO["software_engineer"])
+    try:
+        temp_slider = int(nudge_temperature_0_100)
+    except (TypeError, ValueError):
+        temp_slider = 50
+    temp_slider = max(0, min(100, temp_slider))
+
+    try:
+        elapsed = int(seconds_elapsed)
+    except (TypeError, ValueError):
+        elapsed = 0
+    elapsed = max(0, elapsed)
+
+    itype = str(interview_type or "role").strip().lower()
+    type_label = (
+        "Job description-based interview (questions tailored to a pasted posting)"
+        if itype == "job_description"
+        else "Role-based interview (questions for the selected position)"
+    )
+
+    # Calmer when supportive, more variable when harsh (clearer contrast at the extremes)
+    llm_temp = 0.38 + (temp_slider / 100.0) * 0.58
+
+    if temp_slider <= 30:
+        intensity_block = f"""INTENSITY (slider {temp_slider}, LOW): MAXIMUM_WARMTH.
+The line must be unmistakably gentle and uplifting. Sound like a mentor who truly believes in the candidate: patient, reassuring, generous with time, celebrate that thinking takes effort, invite them to breathe and organize thoughts. Weave in a light, kind nod to the question theme without quoting it back at length. Zero pressure, zero impatience, zero disappointment. This should feel like a hug in words."""
+    elif temp_slider >= 70:
+        intensity_block = f"""INTENSITY (slider {temp_slider}, HIGH): MAXIMUM_PRESSURE.
+The line must be unmistakably tense and impatient while staying in bounds of a real professional interview. Short, clipped, time aware. Make clear you need them to answer now, that silence has gone on too long, that the schedule is tight, that you expect preparedness. You may be cold, skeptical, or brusque. No insults, slurs, threats, discrimination, or personal attacks. Do not soften the urgency."""
+    else:
+        intensity_block = f"""INTENSITY (slider {temp_slider}, MID): Blend clearly between warmth and pressure.
+Lean supportive below 50, lean demanding above 50. The contrast from low vs high slider settings must be obvious if someone heard lines from each side."""
+
+    prompt = f"""You are writing one brief spoken line for "HR-PG" (Human Resources - Professional Gauntlet), a web app that turns job interview practice into a retro turn-based game. Candidates type STAR style answers while a simple game metaphor scores their responses. Your line is NOT scoring feedback. It is only a spoken nudge while they are still thinking and typing.
+
+Context for this session:
+- Interview mode: {type_label}
+- Target role: {role_info["name"]} ({role_info["description"]})
+- Difficulty setting: {difficulty}
+- Seconds elapsed on the stopwatch since this question appeared: {elapsed}
+
+{intensity_block}
+
+The interview question they are answering (for reference; do not repeat it verbatim unless a very short echo feels natural):
+\"\"\"{question_text}\"\"\"
+
+Requirements:
+- Exactly ONE or TWO short sentences, as the interviewer or recruiter speaking aloud.
+- Obey the INTENSITY block above as the top priority. Make low slider and high slider sound like different people.
+- Realistic interview language only. No game metaphors (no boss, health, damage, bars, etc.).
+- Do not mention AI, models, sliders, or the stopwatch.
+- FORMATTING: Do not use hyphens anywhere in your reply. That means no ASCII minus hyphen, no en dash, no em dash. Use spaces, commas, or periods instead.
+
+Respond with ONLY the line(s), no quotation marks around them and no preamble."""
+
+    messages = [{"role": "user", "content": prompt}]
+    response = make_llm_request(messages, max_tokens=220, temperature=llm_temp)
+
+    if not response:
+        return None
+
+    line = response.strip()
+    if line.startswith('"') and line.endswith('"') and len(line) > 2:
+        line = line[1:-1].strip()
+
+    # Enforce no hyphen like characters in output
+    line = line.replace("\u2013", " ").replace("\u2014", " ").replace("\u2212", " ")
+    line = re.sub(r"-+", " ", line)
+    line = re.sub(r"\s+", " ", line).strip()
+
+    # Keep nudges short if the model runs long
+    if len(line) > 400:
+        line = line[:397].rstrip() + "..."
+    return line or None
 
 
 @app.route('/api/health', methods=['GET'])
@@ -465,6 +553,50 @@ def get_question():
         "question": ai_question,
         "totalQuestions": 5
     })
+
+
+@app.route('/api/game/nudge', methods=['POST'])
+def game_nudge():
+    """LLM-generated time-pressure line for the optional interview stopwatch."""
+    data = request.json
+    if not data or not isinstance(data, dict):
+        return jsonify({"message": "Invalid JSON payload"}), 400
+
+    role = data.get('role', 'software_engineer')
+    if role not in ROLE_INFO:
+        return jsonify({"message": "Invalid role specified"}), 400
+
+    question_text = data.get('question', '')
+    if not isinstance(question_text, str) or not question_text.strip():
+        return jsonify({"message": "question is required"}), 400
+
+    interview_type = data.get('interviewType', 'role')
+    if not isinstance(interview_type, str):
+        return jsonify({"message": "interviewType must be a string"}), 400
+
+    requested_difficulty = data.get('difficulty')
+    role_info = ROLE_INFO[role]
+    difficulty = normalize_difficulty(requested_difficulty, fallback=role_info["difficulty"])
+
+    nudge_temperature = data.get('nudgeTemperature', 50)
+    seconds_elapsed = data.get('secondsElapsed', 0)
+
+    nudge = generate_interview_nudge_with_ai(
+        role,
+        difficulty,
+        question_text.strip(),
+        interview_type,
+        nudge_temperature,
+        seconds_elapsed,
+    )
+
+    if not nudge:
+        return jsonify({
+            "error": True,
+            "message": "Unable to generate a nudge. Please check your API configuration and try again.",
+        }), 503
+
+    return jsonify({"nudge": nudge})
 
 
 @app.route('/api/game/answer', methods=['POST'])
