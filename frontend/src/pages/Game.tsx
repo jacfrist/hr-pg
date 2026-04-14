@@ -4,6 +4,7 @@ import axios from 'axios';
 import { API_BASE_URL } from '../config';
 import { useAuth } from '../context/AuthContext';
 import MicDictation from '../components/asr/MicDictation';
+import { playPlayerAttack, playBossAttack } from '../audio/sfx';
 
 import sweBoss from '../assets/swe-boss.png';
 import sweBossMove from '../assets/swe-boss-move.png';
@@ -339,6 +340,9 @@ function Game() {
         feedback: response.data.feedback
       }));
 
+      if (newBossHealth < gameState.bossHealth) playPlayerAttack();
+      if (newPlayerHealth < gameState.playerHealth) playBossAttack();
+
       const computed: NextAction = (() => {
         const nextQuestionNumber = gameState.currentQuestion + 1;
 
@@ -527,30 +531,30 @@ function Game() {
           />
         </div>
 
-        {!isShowingFeedback && (
-          <button
-            onClick={submitAnswer}
-            disabled={
-              isLoading ||
-              !currentQuestionId ||
-              !answer.trim() ||
-              (!!nextAction && !shouldAutoAdvance)
-            }
-            className={[
-              "w-full text-white text-sm font-bold py-2 px-4 rounded-lg transition-all duration-200",
-              (isLoading || !currentQuestionId || !answer.trim() || (!!nextAction && !shouldAutoAdvance))
-                ? "bg-gray-600 cursor-not-allowed"
-                : "transform hover:scale-105"
-            ].join(" ")}
+        <button
+          onClick={submitAnswer}
+          disabled={
+            isLoading ||
+            !currentQuestionId ||
+            !gameState.question ||
+            !answer.trim() ||
+            isShowingFeedback ||
+            (!!nextAction && !shouldAutoAdvance)
+          }
+          className={[
+            "w-full text-white text-sm font-bold py-2 px-4 rounded-lg transition-all duration-200",
+            (isLoading || !currentQuestionId || !gameState.question || !answer.trim() || isShowingFeedback || (!!nextAction && !shouldAutoAdvance))
+              ? "bg-gray-600 cursor-not-allowed opacity-50"
+              : "transform hover:scale-105"
+          ].join(" ")}
             style={!isLoading && currentQuestionId && answer.trim() && !(!!nextAction && !shouldAutoAdvance) ? {
               background: 'linear-gradient(180deg, #3b3f6d, #272b55)',
               border: '2px solid var(--retro-border)',
               boxShadow: '0 0 0 2px var(--retro-border-dark), 0 6px 0 rgba(0, 0, 0, 0.5)'
             } : undefined}
-          >
-            {isLoading ? 'Submitting...' : isPracticeMode ? 'Get Feedback' : 'Submit Answer'}
-          </button>
-        )}
+        >
+          {isLoading ? 'Submitting...' : isPracticeMode ? 'Get Feedback' : 'Submit Answer'}
+        </button>
 
         {isShowingFeedback && (
           <div className="mt-3 text-xs text-cyan-300">
