@@ -197,8 +197,12 @@ function LevelSelect() {
               </div>
             </div>
 
-            {/* Question Type Selection */}
-            <div className="flex flex-col items-center gap-3">
+            
+          </div>
+        </div>
+
+        {/* Question Type Selection */}
+            <div className="flex flex-col items-center gap-3 mb-8">
               <div className="text-cyan-200 text-sm font-semibold">Question Type</div>
               <div className="flex gap-3 flex-wrap justify-center">
                 <button
@@ -219,8 +223,6 @@ function LevelSelect() {
                 </button>
               </div>
             </div>
-          </div>
-        </div>
 
         {/* Interview Type and Stopwatch Selection - Same Row */}
         <div className="mb-8 mx-auto max-w-5xl">

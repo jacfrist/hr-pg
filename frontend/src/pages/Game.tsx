@@ -550,10 +550,10 @@ function Game() {
       <div className="max-w-4xl mx-auto">
 
         {/* Top meta row */}
-        <div className="flex items-center justify-between mb-3 text-sm text-cyan-300">
+        <div className="flex items-center justify-between mb-3 text-xs tracking-tighter text-cyan-300">
           <span>Question <span className="text-white font-semibold">{gameState.currentQuestion}</span> of {gameState.totalQuestions}</span>
           <span>Difficulty: <span className="text-white font-semibold">{difficulty}</span></span>
-          <span>Question Type: <span className="text-white font-semibold capitalize">{questionType}</span></span>
+          <span className="font-semibold capitalize">{questionType}</span>
           <span>
             {interviewType === 'job_description' ? 'Job Description-Based' : 'Role-Based'}
           </span>
