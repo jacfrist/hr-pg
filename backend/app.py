@@ -54,6 +54,27 @@ DIFFICULTY_LEVELS = {"Easy", "Medium", "Hard"}
 QUESTION_TYPES = {"behavioral", "technical"}
 
 
+PASSWORD_MIN_LENGTH = 8
+
+def normalize_email(email: str) -> str:
+    return str(email).strip().lower()
+
+def is_valid_email(email: str) -> bool:
+    email_regex = r"^[^\s@]+@[^\s@]+\.[^\s@]+$"
+    return bool(re.match(email_regex, email))
+
+def validate_password(password: str):
+    if len(password) < PASSWORD_MIN_LENGTH:
+        return f"Password must be at least {PASSWORD_MIN_LENGTH} characters long."
+    if not re.search(r"[a-z]", password):
+        return "Password must include at least one lowercase letter."
+    if not re.search(r"[A-Z]", password):
+        return "Password must include at least one uppercase letter."
+    if not re.search(r"\d", password):
+        return "Password must include at least one number."
+    return None
+
+
 def normalize_difficulty(difficulty, fallback: str = "Medium") -> str:
     """Normalize a difficulty string to one of Easy/Medium/Hard."""
     if not difficulty:
@@ -454,29 +475,37 @@ def register():
 
     email = data.get('email')
     password = data.get('password')
-    
+
     if not email or not isinstance(email, str) or not password or not isinstance(password, str):
         return jsonify({"message": "Valid email and password are required"}), 400
-        
+
+    email = normalize_email(email)
+
     if User.query.filter_by(email=email).first():
-        return jsonify({"message": "Email already registered"}), 400
-        
+        return jsonify({"message": "An account with this email already exists."}), 400
+
+    if not is_valid_email(email):
+        return jsonify({"message": "Please enter a valid email address."}), 400
+
+    password_error = validate_password(password)
+    if password_error:
+        return jsonify({"message": password_error}), 400
+
     try:
         new_user = User(email=email)
         new_user.set_password(password)
-        
+
         db.session.add(new_user)
         db.session.commit()
     except Exception as e:
         db.session.rollback()
         app.logger.error(f"Database error during registration: {e}")
         return jsonify({"message": "An error occurred during registration"}), 500
-    
-    # Auto-login after registration
+
     access_token = create_access_token(identity=str(new_user.id))
     return jsonify({
         "message": "User registered successfully",
-        "token": access_token, 
+        "token": access_token,
         "user": {"id": new_user.id, "email": new_user.email}
     })
 

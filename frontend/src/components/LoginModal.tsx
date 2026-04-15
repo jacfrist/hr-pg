@@ -8,6 +8,24 @@ interface LoginModalProps {
     onClose: () => void;
 }
 
+const MIN_PASSWORD_LENGTH = 8;
+
+const validatePassword = (password: string): string | null => {
+    if (password.length < MIN_PASSWORD_LENGTH) {
+        return `Password must be at least ${MIN_PASSWORD_LENGTH} characters long.`;
+    }
+    if (!/[a-z]/.test(password)) {
+        return 'Password must include at least one lowercase letter.';
+    }
+    if (!/[A-Z]/.test(password)) {
+        return 'Password must include at least one uppercase letter.';
+    }
+    if (!/[0-9]/.test(password)) {
+        return 'Password must include at least one number.';
+    }
+    return null;
+};
+
 const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose }) => {
     const [isLogin, setIsLogin] = useState(true);
     const [email, setEmail] = useState('');
@@ -34,26 +52,35 @@ const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose }) => {
                 login(response.data.token, response.data.user);
                 onClose();
             } else {
-                // Fallback if no token returned (shouldn't happen with new backend)
                 setIsLogin(true);
                 setError('Registration successful! Please log in.');
-                setLoading(false);
             }
         } catch (err: unknown) {
             if (axios.isAxiosError(err)) {
                 setError(
-                (err.response?.data as { message?: string } | undefined)?.message ||
-                'Login failed. Please try again.'
+                    (err.response?.data as { message?: string } | undefined)?.message ||
+                    (isLogin
+                        ? 'Login failed. Please try again.'
+                        : 'Registration failed. Please try again.')
                 );
             } else {
-                setError('Login failed. Please try again.');
+                setError(
+                    isLogin
+                        ? 'Login failed. Please try again.'
+                        : 'Registration failed. Please try again.'
+                );
             }
         } finally {
-            if (isLogin) {
-                setLoading(false);
-            }
+            setLoading(false);
         }
     };
+
+    const passwordRequirements = [
+        `At least ${MIN_PASSWORD_LENGTH} characters`,
+        'One uppercase letter',
+        'One lowercase letter',
+        'One number'
+    ];
 
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 backdrop-blur-sm">
@@ -98,6 +125,17 @@ const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose }) => {
                         />
                     </div>
 
+                    {!isLogin && (
+                        <div className="bg-purple-950 border border-purple-700 rounded p-3 text-sm text-purple-200">
+                            <p className="font-semibold mb-2">Password requirements:</p>
+                            <ul className="list-disc list-inside space-y-1">
+                                {passwordRequirements.map((requirement) => (
+                                    <li key={requirement}>{requirement}</li>
+                                ))}
+                            </ul>
+                        </div>
+                    )}
+
                     <button
                         type="submit"
                         disabled={loading}
@@ -112,6 +150,7 @@ const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose }) => {
                         onClick={() => {
                             setIsLogin(!isLogin);
                             setError('');
+                            setPassword('');
                         }}
                         className="text-purple-300 hover:text-white text-sm underline"
                     >
