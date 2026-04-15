@@ -1,3 +1,4 @@
+import JobDescriptionInput from '../components/JobDescriptionInput';
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
@@ -60,7 +61,7 @@ function LevelSelect() {
     const trimmedJobDescription = jobDescription.trim();
 
     if (interviewType === 'job_description' && !trimmedJobDescription) {
-      setError('Please paste a job description to continue.');
+      setError('Please paste or upload a job description to continue.');
       return;
     }
 
@@ -345,28 +346,14 @@ function LevelSelect() {
 
         {/* Job Description Textarea - Only shown when job_description type is selected */}
         {interviewType === 'job_description' && (
-          <div className="mb-8 max-w-3xl mx-auto retro-panel">
-            <label htmlFor="jobDescription" className="block text-cyan-200 text-sm mb-2">
-              Paste the job description you are interviewing for
-            </label>
-            <textarea
-              id="jobDescription"
-              value={jobDescription}
-              onChange={(e) => setJobDescription(e.target.value)}
-              className="w-full h-36 p-3 rounded-lg text-white placeholder-cyan-400"
-              style={{
-                backgroundColor: 'var(--retro-panel)',
-                border: '2px solid var(--retro-border)',
-                boxShadow: 'inset 0 0 0 2px var(--retro-border-dark)'
-              }}
-              onFocus={(e) => e.target.style.borderColor = 'var(--retro-accent)'}
-              onBlur={(e) => e.target.style.borderColor = 'var(--retro-border)'}
-              placeholder="Paste responsibilities, requirements, and preferred qualifications..."
-            />
-            <p className="text-xs text-cyan-300 mt-2">
-              Questions will be generated based on this posting while still matching your selected role and difficulty.
-            </p>
-          </div>
+          <JobDescriptionInput
+            value={jobDescription}
+            onChange={(value) => {
+              setJobDescription(value);
+              if (error) setError('');
+            }}
+            onError={(message) => setError(message)}
+          />
         )}
 
         {error && (
