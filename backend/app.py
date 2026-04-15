@@ -51,6 +51,7 @@ ROLE_INFO = {
 
 # Supported difficulty levels (user-selectable)
 DIFFICULTY_LEVELS = {"Easy", "Medium", "Hard"}
+QUESTION_TYPES = {"behavioral", "technical"}
 
 
 def normalize_difficulty(difficulty, fallback: str = "Medium") -> str:
@@ -65,6 +66,37 @@ def normalize_difficulty(difficulty, fallback: str = "Medium") -> str:
     if d == "hard":
         return "Hard"
     return fallback
+
+
+def calculate_combat_results(score, difficulty, boss_health, player_health):
+    # Format: { Difficulty: (damage_multiplier, counter_threshold) }
+    balance_config = {
+        "Easy": (2.0, 5),
+        "Medium": (1.8, 6),
+        "Hard": (1.5, 8),
+    }
+
+    multiplier, counter_threshold = balance_config.get(difficulty, (1.2, 6))
+
+    damage = int(round(score * multiplier))
+    damage = max(0, min(100, damage))
+
+    player_damage = 0
+    combat_feedback = "Critical hit!" if score >= 9 else "Solid strike."
+    if score < counter_threshold:
+        player_damage = (counter_threshold - score) * 3
+        combat_feedback = f"The answer was weak. The boss counters for {player_damage} damage!"
+
+    updated_boss_health = max(0, boss_health - damage)
+    updated_player_health = max(0, player_health - player_damage)
+
+    return {
+        "boss_damage": damage,
+        "player_damage": player_damage,
+        "new_boss_hp": updated_boss_health,
+        "new_player_hp": updated_player_health,
+        "feedback": combat_feedback,
+    }
 
 def make_llm_request(messages, max_retries=3, backoff_factor=1.5, max_tokens=4096, temperature=0.7):
 
@@ -142,22 +174,76 @@ def make_llm_request(messages, max_retries=3, backoff_factor=1.5, max_tokens=409
     return None
 
 
-def generate_question_with_ai(role, question_number, difficulty):
+def normalize_question_type(question_type, fallback: str = "behavioral") -> str:
+    if not question_type:
+        return fallback
+    q = str(question_type).strip().lower()
+    if q in QUESTION_TYPES:
+        return q
+    return fallback
+
+
+def normalize_question_text(text: str) -> str:
+    if not text:
+        return ""
+    normalized = re.sub(r"[^a-z0-9\s]", " ", str(text).lower())
+    normalized = re.sub(r"\s+", " ", normalized).strip()
+    return normalized
+
+
+def generate_question_with_ai(role, question_number, difficulty, question_type="behavioral", excluded_questions=None):
     """Generate an interview question using the Amplify AI."""
     role_info = ROLE_INFO.get(role, ROLE_INFO["software_engineer"])
+    normalized_question_type = normalize_question_type(question_type, fallback="behavioral")
+    excluded_questions = excluded_questions or []
 
-    prompt = f"""You are an expert interviewer for {role_info['description']}.
+    question_type_instruction = (
+        "Generate a technical interview question for a candidate. Focus on core concepts, first principles, and technical reasoning relevant to the role."
+        if normalized_question_type == "technical"
+        else "Generate a behavioral interview question for a candidate."
+    )
 
-Generate a behavioral interview question for a candidate. This is question {question_number} of the interview.
+    style_instruction = (
+        "For technical questions, ask concept-first questions about architecture, debugging, tradeoffs, implementation details, or data analysis decisions. Prefer explanations of why and how over past personal experiences."
+        if normalized_question_type == "technical"
+        else "For behavioral questions, ask about past experiences and decision-making using specific examples."
+    )
 
-Role: {role_info['name']}
-Difficulty: {difficulty}
-
-Requirements:
-- The question should be appropriate for the {difficulty} difficulty level
+    difficulty_instruction = (
+        """
+- For "Easy" difficulty: Ask foundational concept checks and basic technical reasoning
+- For "Medium" difficulty: Ask applied concept questions with tradeoffs or debugging choices
+- For "Hard" difficulty: Ask deeper system-level or scenario-driven concept questions requiring rigorous reasoning
+""".strip()
+        if normalized_question_type == "technical"
+        else """
 - For "Easy" difficulty: Ask straightforward questions about basic experiences
 - For "Medium" difficulty: Ask about specific challenges and how they were handled
 - For "Hard" difficulty: Ask complex scenario-based questions requiring deep thinking
+""".strip()
+    )
+
+    excluded_block = ""
+    if excluded_questions:
+        excluded_list = "\n".join([f"- {q}" for q in excluded_questions[:8]])
+        excluded_block = f"""
+Do NOT repeat or closely paraphrase any of these previously asked questions:
+{excluded_list}
+"""
+
+    prompt = f"""You are an expert interviewer for {role_info['description']}.
+
+{question_type_instruction} This is question {question_number} of the interview.
+
+Role: {role_info['name']}
+Difficulty: {difficulty}
+Question Type: {normalized_question_type}
+
+Requirements:
+- {style_instruction}
+- The question should be appropriate for the {difficulty} difficulty level
+{difficulty_instruction}
+{excluded_block}
 
 Respond with ONLY the interview question, nothing else. Do not include any preamble or explanation."""
 
@@ -504,23 +590,59 @@ def get_question():
             return jsonify({"message": "sessionId must be an integer"}), 400
 
     requested_difficulty = data.get('difficulty')
+    requested_question_type = data.get('questionType')
 
     role_info = ROLE_INFO[role]
     difficulty = normalize_difficulty(requested_difficulty, fallback=role_info["difficulty"])
+    question_type = normalize_question_type(requested_question_type, fallback="behavioral")
 
     # If a session exists, trust the session's difficulty (so refresh/reload stays consistent)
+    existing_questions = []
+    existing_question_norms = set()
     if session_id:
         session = db.session.get(InterviewSession, session_id)
         if session and session.difficulty:
             difficulty = normalize_difficulty(session.difficulty, fallback=difficulty)
 
-    # Try to generate a question with AI
-    ai_question = generate_question_with_ai(role, question_number + 1, difficulty)
+        existing_questions = (
+            Question.query
+            .filter_by(session_id=session_id)
+            .order_by(Question.turn_index.asc())
+            .all()
+        )
+        existing_question_norms = {
+            normalize_question_text(q.prompt_text)
+            for q in existing_questions
+            if q and q.prompt_text
+        }
+
+    # Try to generate a question with AI and avoid repeats within this session.
+    ai_question = None
+    max_attempts = 5
+    excluded_questions = [q.prompt_text for q in existing_questions if q.prompt_text]
+
+    for _ in range(max_attempts):
+        candidate_question = generate_question_with_ai(
+            role,
+            question_number + 1,
+            difficulty,
+            question_type=question_type,
+            excluded_questions=excluded_questions,
+        )
+        if not candidate_question:
+            continue
+
+        normalized_candidate = normalize_question_text(candidate_question)
+        if normalized_candidate and normalized_candidate not in existing_question_norms:
+            ai_question = candidate_question
+            break
+
+        excluded_questions.append(candidate_question)
 
     if not ai_question:
         return jsonify({
             "error": True,
-            "message": "Unable to generate question. Please check your API configuration and try again."
+            "message": "Unable to generate a unique question. Please try again."
         }), 503
         
     # Save question to DB if session exists
@@ -529,7 +651,7 @@ def get_question():
             question = Question(
                 session_id=session_id,
                 turn_index=question_number + 1,
-                question_type="behavioral", # Default for now
+                question_type=question_type,
                 prompt_text=ai_question
             )
             db.session.add(question)
@@ -540,6 +662,7 @@ def get_question():
                 "questionId": question.id,
                 "questionNumber": question_number + 1,
                 "question": ai_question,
+                "questionType": question_type,
                 "totalQuestions": 5
             })
         except Exception as e:
@@ -551,6 +674,7 @@ def get_question():
     return jsonify({
         "questionNumber": question_number + 1,
         "question": ai_question,
+        "questionType": question_type,
         "totalQuestions": 5
     })
 
@@ -671,27 +795,11 @@ def submit_answer():
         updated_boss_health = boss_health
         updated_player_health = player_health
     else:
-        # AI grading successful - use score as damage to boss
-        # Difficulty modifiers: make Easy feel forgiving, Hard feel punishing.
-        if difficulty == "Easy":
-            damage = int(round(score * 1.05))
-            counter_threshold = 20
-        elif difficulty == "Hard":
-            damage = int(round(score * 0.95))
-            counter_threshold = 40
-        else:
-            damage = score
-            counter_threshold = 30
-
-        damage = max(0, min(100, damage))
-        updated_boss_health = max(0, boss_health - damage)
-        updated_player_health = max(0, player_health)
-
-        # If score is very low, the boss counterattacks
-        if score < counter_threshold:
-            player_damage = counter_threshold - score
-            updated_player_health = max(0, player_health - player_damage)
-            feedback = f"{feedback} The boss counters for {player_damage} damage!"
+        combat = calculate_combat_results(score, difficulty, boss_health, player_health)
+        damage = combat["boss_damage"]
+        updated_boss_health = combat["new_boss_hp"]
+        updated_player_health = combat["new_player_hp"]
+        feedback = f"{feedback} {combat['feedback']}"
     
     # Security/consistency: Ensure provided question_id actually belongs to the provided session_id
     if question_id and session_id:

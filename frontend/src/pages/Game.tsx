@@ -41,28 +41,6 @@ const STOPWATCH_PREFS_KEY = 'hrpg_game_stopwatch';
 
 const NUDGE_INTERVAL_SECONDS = 20;
 
-type StopwatchPrefs = {
-  enabled: boolean;
-  temperature: number;
-};
-
-function loadStopwatchPrefs(): StopwatchPrefs {
-  try {
-    const raw = localStorage.getItem(STOPWATCH_PREFS_KEY);
-    if (!raw) return { enabled: false, temperature: 35 };
-    const p = JSON.parse(raw) as Partial<StopwatchPrefs>;
-    return {
-      enabled: Boolean(p.enabled),
-      temperature:
-        typeof p.temperature === 'number'
-          ? Math.min(100, Math.max(0, p.temperature))
-          : 35,
-    };
-  } catch {
-    return { enabled: false, temperature: 35 };
-  }
-}
-
 function stripHyphensFromNudge(text: string): string {
   return text
     .replace(/\u2013/g, " ")
@@ -114,6 +92,7 @@ function Game() {
   const role = searchParams.get('role') || 'software_engineer';
   const difficulty = (searchParams.get('difficulty') || 'Medium');
   const interviewType = (searchParams.get('interviewType') || 'role');
+  const questionType = (searchParams.get('questionType') || 'behavioral');
   const mode = (searchParams.get('mode') || 'classic') as 'classic' | 'practice';
   const isPracticeMode = mode === 'practice';
   const [jobDescription, setJobDescription] = useState('');
@@ -192,8 +171,8 @@ function Game() {
   const stopwatchFromUrl = searchParams.get('stopwatch') === 'true';
   const nudgeTempFromUrl = Number(searchParams.get('nudgeTemp')) || 35;
 
-  const [stopwatchEnabled, setStopwatchEnabled] = useState(() => stopwatchFromUrl);
-  const [nudgeTemperature, setNudgeTemperature] = useState(() => nudgeTempFromUrl);
+  const [stopwatchEnabled] = useState(() => stopwatchFromUrl);
+  const [nudgeTemperature] = useState(() => nudgeTempFromUrl);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [latestNudge, setLatestNudge] = useState<string | null>(null);
   const [nudgeLoading, setNudgeLoading] = useState(false);
@@ -334,6 +313,7 @@ function Game() {
           saved?.role === role &&
           saved?.difficulty === difficulty &&
           (saved?.interviewType || 'role') === interviewType &&
+          (saved?.questionType || 'behavioral') === questionType &&
           saved?.gameState &&
           typeof saved.gameState.question === 'string' &&
           saved.gameState.question.trim().length > 0;
@@ -376,6 +356,7 @@ function Game() {
       role,
       difficulty,
       interviewType,
+      questionType,
       jobDescription,
       sessionId,
       currentQuestionId,
@@ -384,7 +365,7 @@ function Game() {
     };
 
     localStorage.setItem(GAME_STATE_KEY, JSON.stringify(payload));
-  }, [hydrated, role, difficulty, interviewType, jobDescription, sessionId, currentQuestionId, gameState, answer]);
+  }, [hydrated, role, difficulty, interviewType, questionType, jobDescription, sessionId, currentQuestionId, gameState, answer]);
 
   const performNextAction = (action: NextAction) => {
     setNextAction(null);
@@ -415,6 +396,7 @@ function Game() {
         {
           role,
           difficulty,
+          questionType,
           mode,
           interviewType,
           jobDescription: interviewType === 'job_description' ? effectiveJobDescription : ''
@@ -448,6 +430,7 @@ function Game() {
       const response = await axios.post(`${API_BASE_URL}/api/game/question`, {
         role,
         difficulty,
+        questionType,
         mode,
         interviewType,
         jobDescription: interviewType === 'job_description' ? jobDescription : '',
@@ -494,6 +477,7 @@ function Game() {
         playerHealth: gameState.playerHealth,
         role,
         difficulty,
+        questionType,
         interviewType,
         mode,
         jobDescription: interviewType === 'job_description' ? jobDescription : '',
@@ -566,9 +550,10 @@ function Game() {
       <div className="max-w-4xl mx-auto">
 
         {/* Top meta row */}
-        <div className="flex items-center justify-between mb-3 text-sm text-cyan-300">
+        <div className="flex items-center justify-between mb-3 text-xs tracking-tighter text-cyan-300">
           <span>Question <span className="text-white font-semibold">{gameState.currentQuestion}</span> of {gameState.totalQuestions}</span>
           <span>Difficulty: <span className="text-white font-semibold">{difficulty}</span></span>
+          <span className="font-semibold capitalize">{questionType}</span>
           <span>
             {interviewType === 'job_description' ? 'Job Description-Based' : 'Role-Based'}
           </span>

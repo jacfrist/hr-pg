@@ -14,6 +14,7 @@ function LevelSelect() {
   const [loading, setLoading] = useState(true);
   const [difficulty, setDifficulty] = useState<'Easy' | 'Medium' | 'Hard'>('Medium');
   const [interviewType, setInterviewType] = useState<'role' | 'job_description'>('role');
+  const [questionType, setQuestionType] = useState<'behavioral' | 'technical'>('behavioral');
   const [jobDescription, setJobDescription] = useState('');
   const [mode, setMode] = useState<'classic' | 'practice'>('classic');
   const [stopwatchEnabled, setStopwatchEnabled] = useState(false);
@@ -71,7 +72,7 @@ function LevelSelect() {
       localStorage.removeItem('hrpg_job_description_draft');
     }
 
-    navigate(`/game?role=${roleId}&difficulty=${difficulty}&interviewType=${interviewType}&mode=${mode}&stopwatch=${stopwatchEnabled}&nudgeTemp=${nudgeTemperature}`);
+    navigate(`/game?role=${roleId}&difficulty=${difficulty}&interviewType=${interviewType}&questionType=${questionType}&mode=${mode}&stopwatch=${stopwatchEnabled}&nudgeTemp=${nudgeTemperature}`);
   };
 
   const getDifficultyStyle = (d: 'Easy' | 'Medium' | 'Hard') => {
@@ -117,6 +118,28 @@ function LevelSelect() {
         boxShadow: `0 0 10px ${color.glow}`
       };
     }
+    return {
+      backgroundColor: 'rgba(31, 36, 64, 0.4)',
+      borderColor: 'var(--retro-border-dark)'
+    };
+  };
+
+  const getQuestionTypeStyle = (q: 'behavioral' | 'technical') => {
+    const active = q === questionType;
+    const colors = {
+      behavioral: { border: '#22d3ee', glow: '#22d3ee', bg: 'linear-gradient(180deg, #2a4f5a, #1b333b)' },
+      technical: { border: '#a78bfa', glow: '#a78bfa', bg: 'linear-gradient(180deg, #473a6b, #31254f)' }
+    };
+
+    const color = colors[q];
+    if (active) {
+      return {
+        background: color.bg,
+        borderColor: color.border,
+        boxShadow: `0 0 10px ${color.glow}`
+      };
+    }
+
     return {
       backgroundColor: 'rgba(31, 36, 64, 0.4)',
       borderColor: 'var(--retro-border-dark)'
@@ -173,8 +196,33 @@ function LevelSelect() {
                 </button>
               </div>
             </div>
+
+            
           </div>
         </div>
+
+        {/* Question Type Selection */}
+            <div className="flex flex-col items-center gap-3 mb-8">
+              <div className="text-cyan-200 text-sm font-semibold">Question Type</div>
+              <div className="flex gap-3 flex-wrap justify-center">
+                <button
+                  type="button"
+                  className="px-4 py-2 rounded text-white text-sm font-semibold transition-all duration-150 border-2"
+                  style={getQuestionTypeStyle('behavioral')}
+                  onClick={() => setQuestionType('behavioral')}
+                >
+                  Behavioral
+                </button>
+                <button
+                  type="button"
+                  className="px-4 py-2 rounded text-white text-sm font-semibold transition-all duration-150 border-2"
+                  style={getQuestionTypeStyle('technical')}
+                  onClick={() => setQuestionType('technical')}
+                >
+                  Technical
+                </button>
+              </div>
+            </div>
 
         {/* Interview Type and Stopwatch Selection - Same Row */}
         <div className="mb-8 mx-auto max-w-5xl">
@@ -346,6 +394,9 @@ function LevelSelect() {
                   </div>
                   <div>
                     Mode: <span className="text-white font-semibold capitalize">{mode}</span>
+                  </div>
+                  <div>
+                    Question Type: <span className="text-white font-semibold capitalize">{questionType}</span>
                   </div>
                 </div>
                 <button
