@@ -212,7 +212,7 @@ def normalize_question_text(text: str) -> str:
     return normalized
 
 
-def generate_question_with_ai(role, question_number, difficulty, question_type="behavioral", excluded_questions=None):
+def generate_question_with_ai(role, question_number, difficulty, question_type="behavioral", excluded_questions=None, job_description=None):
     """Generate an interview question using the Amplify AI."""
     role_info = ROLE_INFO.get(role, ROLE_INFO["software_engineer"])
     normalized_question_type = normalize_question_type(question_type, fallback="behavioral")
@@ -251,6 +251,17 @@ def generate_question_with_ai(role, question_number, difficulty, question_type="
 Do NOT repeat or closely paraphrase any of these previously asked questions:
 {excluded_list}
 """
+    job_description_block = ""
+    if job_description and str(job_description).strip():
+        trimmed_job_description = str(job_description).strip()[:6000]
+        job_description_block = f"""
+Job Description Context:
+\"\"\"{trimmed_job_description}\"\"\"
+
+Use this job description to tailor the interview question to the actual responsibilities, requirements, tools, and expectations in the posting.
+Still keep the question aligned with the selected role, difficulty, and question type.
+Do not copy long parts of the posting verbatim.
+"""
 
     prompt = f"""You are an expert interviewer for {role_info['description']}.
 
@@ -259,6 +270,8 @@ Do NOT repeat or closely paraphrase any of these previously asked questions:
 Role: {role_info['name']}
 Difficulty: {difficulty}
 Question Type: {normalized_question_type}
+
+{job_description_block}
 
 Requirements:
 - {style_instruction}
@@ -601,6 +614,14 @@ def get_question():
     data = request.json
     if not data or not isinstance(data, dict):
         return jsonify({"message": "Invalid JSON payload"}), 400
+    
+    interview_type = data.get('interviewType', 'role')
+    if interview_type is not None and not isinstance(interview_type, str):
+        return jsonify({"message": "interviewType must be a string"}), 400
+
+    job_description = data.get('jobDescription', '')
+    if job_description is not None and not isinstance(job_description, str):
+        return jsonify({"message": "jobDescription must be a string"}), 400
 
     role = data.get('role', 'software_engineer')
     if role not in ROLE_INFO:
@@ -657,6 +678,7 @@ def get_question():
             difficulty,
             question_type=question_type,
             excluded_questions=excluded_questions,
+            job_description=job_description if str(interview_type).strip().lower() == "job_description" else None,
         )
         if not candidate_question:
             continue
